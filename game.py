@@ -30,7 +30,7 @@ class Game:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
-        pygame.display.set_caption("Chess Trainer - Final Fixed (Really)")
+        pygame.display.set_caption("Chess Trainer - Eval Bar & Best Move")
 
         # View
         self.renderer = GameRenderer(self.screen)
@@ -57,7 +57,7 @@ class Game:
         self.selected_square = None
         self.valid_moves = []
         self.move_history_san = []
-        self.move_history_obj = []  # เก็บ Object chess.Move
+        self.move_history_obj = []
         self.current_move_idx = 0
 
         # Status
@@ -65,6 +65,9 @@ class Game:
         self.game_result_msg = ""
         self.in_check = False
         self.checked_king_pos = None
+
+        # Analysis Data
+        self.best_move_text = ""  # <--- เพิ่มตัวแปรเก็บข้อความ Best Move
 
         # Special Actions
         self.is_promoting = False
@@ -116,7 +119,7 @@ class Game:
         self.window_width, self.window_height = self.screen.get_size()
         w, h = self.window_width, self.window_height
 
-        margin = 25
+        margin = 45  # Margin 45 เพื่อให้มีที่วาง Eval Bar
         self.panel_w = 360
 
         avail_w = w - (margin * 2) - self.panel_w - 25
@@ -158,6 +161,9 @@ class Game:
         self.premove_squares = []
         self.analysis_results = []
         self.review_mode = False
+        self.best_move_text = ""
+        self.eval_cp = None
+        self.eval_mate = None
 
         self.analyze_board()
         self.trigger_engine_move()
@@ -236,6 +242,9 @@ class Game:
 
         if self.game_over: return
 
+        if self.current_move_idx != len(self.move_history_obj):
+            return
+
         is_my_turn = not (self.engine_enabled and self.board_logic.turn == self.engine_color)
 
         if not (
@@ -250,7 +259,6 @@ class Game:
         if is_my_turn:
             self.premove = None;
             self.premove_squares = []
-            if self.current_move_idx != len(self.move_history_obj): return
             if self.animation: return
 
             if piece and piece.color == self.turn_color:
@@ -315,8 +323,8 @@ class Game:
         if not is_replay:
             self.user_arrows = [];
             self.user_highlights = []
-            san = self.board_logic.san(move)  # คำนวณ SAN ก่อน
-            self.board_logic.push(move)  # แล้วค่อย Push
+            san = self.board_logic.san(move)
+            self.board_logic.push(move)
             self.move_history_san.append(san)
             self.move_history_obj.append(move)
             self.current_move_idx = len(self.move_history_obj)
@@ -341,13 +349,12 @@ class Game:
             self._on_move_complete()
 
     def _visual_move(self, piece, sr, sc, dr, dc, move):
-        # [FIXED] Castling Logic Corrected (No more bad args)
         if piece.kind == "king" and abs(sc - dc) == 2:
             is_kingside = (dc == 6)
             rk_src = 7 if is_kingside else 0
             rk_dst = 5 if is_kingside else 3
-            self.board_visual.move_piece(sr, sc, dr, dc)  # Move King
-            self.board_visual.move_piece(sr, rk_src, sr, rk_dst)  # Move Rook
+            self.board_visual.move_piece(sr, sc, dr, dc)
+            self.board_visual.move_piece(sr, rk_src, sr, rk_dst)
         elif self.board_logic.is_en_passant(move):
             self.board_visual.move_piece(sr, sc, dr, dc)
             self.board_visual.remove_piece(sr, dc)
@@ -378,7 +385,6 @@ class Game:
 
     def _hard_reset_board(self):
         self.board_logic.reset()
-        # [FIXED] Loop exactly to current index
         for i in range(self.current_move_idx):
             self.board_logic.push(self.move_history_obj[i])
 
@@ -452,13 +458,32 @@ class Game:
             self.shake_pos = self.checked_king_pos
             self.shake_timer = 25
 
+    # [UPDATED] วิเคราะห์กระดานใน Thread เพื่อไม่ให้ UI ค้าง
     def analyze_board(self):
-        if not self.review_mode: return
-        try:
-            info = self.engine.analyse_position(self.board_logic)
-            if info: self.eval_cp = info.get("cp"); self.eval_mate = info.get("mate")
-        except:
-            pass
+        # สร้าง Thread เพื่อรันการวิเคราะห์
+        def task():
+            try:
+                # ใช้ FEN เพื่อความปลอดภัยของ Thread (สร้างกระดานจำลอง)
+                current_fen = self.board_logic.fen()
+                temp_board = chess.Board(current_fen)
+
+                info = self.engine.analyse_position(temp_board)
+
+                if info:
+                    self.eval_cp = info.get("cp")
+                    self.eval_mate = info.get("mate")
+
+                    # หา Best Move จาก PV (Principal Variation)
+                    if "pv" in info and len(info["pv"]) > 0:
+                        best_move = info["pv"][0]
+                        # แปลงเป็น SAN เพื่อให้อ่านง่าย
+                        self.best_move_text = temp_board.san(best_move)
+                    else:
+                        self.best_move_text = ""
+            except Exception as e:
+                print(f"Analysis error: {e}")
+
+        threading.Thread(target=task, daemon=True).start()
 
     def trigger_engine_move(self):
         if self.animation: return
@@ -598,6 +623,17 @@ class Game:
                 else:
                     self.user_arrows.append(arr)
         self.right_click_start = None
+
+    def _set_premove(self, start, end):
+        src = self.rowcol_to_uci(*start)
+        dst = self.rowcol_to_uci(*end)
+        move = chess.Move.from_uci(f"{src}{dst}")
+        p = self.board_visual.get_piece(*start)
+        if p and p.kind == "pawn":
+            if (p.color == "white" and end[0] == 0) or (p.color == "black" and end[0] == 7): move = chess.Move.from_uci(
+                f"{src}{dst}q")
+        self.premove = move;
+        self.premove_squares = [start, end]
 
     def toggle_theme(self):
         self.is_dark_mode = not self.is_dark_mode

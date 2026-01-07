@@ -87,7 +87,14 @@ class GameRenderer:
             self._draw_checkmate_badge(game)  # วาดเครื่องหมาย # ทับบนสุด
 
         # 7. UI ส่วนที่เหลือ
-        game.board_visual.draw_coordinates(self.screen, game.board_x, game.board_y, self.font_pgn, game.board_flipped)
+        game.board_visual.draw_coordinates(
+            self.screen,
+            game.board_x,
+            game.board_y,
+            self.font_pgn,
+            game.board_flipped,
+            color=self.theme["coord_color"]  # <--- สำคัญมาก! ต้องใส่บรรทัดนี้
+        )
         if game.review_mode: self._draw_eval_bar(game)
         self._draw_panel(game)
         if game.is_promoting: self._draw_promotion_popup(game)
@@ -221,8 +228,10 @@ class GameRenderer:
 
     def _draw_eval_bar(self, game):
         if game.eval_cp is None and game.eval_mate is None: return
-        bx, by = game.board_x - 15, game.board_y
-        bw, bh = 8, game.square_size * 8
+
+        bx, by = game.board_x - 30, game.board_y
+        bw, bh = 12, game.square_size * 8
+
         pygame.draw.rect(self.screen, (50, 50, 50), (bx, by, bw, bh))
         score = game.eval_cp if game.eval_cp else 0
         if game.eval_mate: score = 1000 if game.eval_mate > 0 else -1000

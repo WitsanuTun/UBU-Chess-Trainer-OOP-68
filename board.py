@@ -1,4 +1,3 @@
-# board.py
 import pygame
 from piece import (
     DEFAULT_SQUARE_SIZE,
@@ -41,23 +40,17 @@ class Board:
     def init_start_position(self):
         s = self.square_size
         self.grid = [[None for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
-
         for c in range(8):
             self.grid[1][c] = Pawn("black", s)
             self.grid[6][c] = Pawn("white", s)
-
         self.grid[0][0] = self.grid[0][7] = Rook("black", s)
         self.grid[7][0] = self.grid[7][7] = Rook("white", s)
-
         self.grid[0][1] = self.grid[0][6] = Knight("black", s)
         self.grid[7][1] = self.grid[7][6] = Knight("white", s)
-
         self.grid[0][2] = self.grid[0][5] = Bishop("black", s)
         self.grid[7][2] = self.grid[7][5] = Bishop("white", s)
-
         self.grid[0][3] = Queen("black", s)
         self.grid[7][3] = Queen("white", s)
-
         self.grid[0][4] = King("black", s)
         self.grid[7][4] = King("white", s)
 
@@ -71,9 +64,7 @@ class Board:
                 y = offset_y + view_row * s
                 pygame.draw.rect(screen, color, (x, y, s, s))
 
-    def draw_highlights(self, screen, offset_x, offset_y,
-                        selected, valid_moves, checked_king,
-                        flipped: bool = False):
+    def draw_highlights(self, screen, offset_x, offset_y, selected, valid_moves, checked_king, flipped: bool = False):
         s = self.square_size
 
         def draw_square(rc, color, width=0):
@@ -89,35 +80,25 @@ class Board:
         for rc in valid_moves:
             draw_square(rc, HIGHLIGHT_MOVE, width=4)
 
-    def draw_pieces(self, screen, offset_x: int, offset_y: int,
-                    shake_square=None, shake_offset=(0, 0),
-                    hidden_square=None,
-                    flipped: bool = False):
-
+    def draw_pieces(self, screen, offset_x: int, offset_y: int, shake_square=None, shake_offset=(0, 0),
+                    hidden_square=None, flipped: bool = False):
         s = self.square_size
         for row in range(BOARD_SIZE):
             for col in range(BOARD_SIZE):
-                # ถ้าเป็นช่องที่กำลังถูกลาก (hidden_square) ให้ข้ามไปเลย ไม่ต้องวาด
-                if hidden_square == (row, col):
-                    continue
-
+                if hidden_square == (row, col): continue
                 piece = self.grid[row][col]
                 if not piece: continue
-
                 view_row, view_col = _to_view_coords(row, col, flipped)
                 x = offset_x + view_col * s
                 y = offset_y + view_row * s
-
                 if shake_square is not None and (row, col) == shake_square:
                     dx, dy = shake_offset
                     x += dx
                     y += dy
-
                 piece.draw(screen, x, y)
 
-    # --- ส่วนที่เพิ่มเข้ามาใหม่ ---
-    def draw_coordinates(self, screen, offset_x: int, offset_y: int, font, flipped: bool = False):
-        color = (80, 60, 40)
+    # [แก้ตรงนี้] เพิ่มพารามิเตอร์ color และลบบรรทัด color = (80,60,40) ทิ้ง
+    def draw_coordinates(self, screen, offset_x: int, offset_y: int, font, flipped: bool = False, color=(50, 50, 50)):
         s = self.square_size
         files = "abcdefgh"
         ranks = "12345678"
@@ -128,11 +109,7 @@ class Board:
 
         # Left (Numbers)
         for view_row in range(8):
-            if flipped:
-                rank_label = ranks[view_row]
-            else:
-                rank_label = ranks[7 - view_row]
-
+            rank_label = ranks[view_row] if flipped else ranks[7 - view_row]
             surf = font.render(rank_label, True, color)
             rect = surf.get_rect()
             rect.centery = board_top + view_row * s + s * 0.5
@@ -141,22 +118,15 @@ class Board:
 
         # Bottom (Letters)
         for view_col in range(8):
-            if flipped:
-                file_label = files[7 - view_col]
-            else:
-                file_label = files[view_col]
-
+            file_label = files[7 - view_col] if flipped else files[view_col]
             surf = font.render(file_label, True, color)
             rect = surf.get_rect()
             rect.centerx = board_left + view_col * s + s * 0.5
             rect.top = board_bottom + 2
             screen.blit(surf, rect)
 
-    # ----------------------------
-
     def get_piece(self, row, col):
-        if self.in_bounds(row, col):
-            return self.grid[row][col]
+        if self.in_bounds(row, col): return self.grid[row][col]
         return None
 
     def in_bounds(self, r, c):
@@ -178,7 +148,6 @@ class Board:
         placement = fen_str.split()[0]
         rows = placement.split("/")
         piece_map = {"p": Pawn, "r": Rook, "n": Knight, "b": Bishop, "q": Queen, "k": King}
-
         for r, row_str in enumerate(rows):
             c = 0
             for ch in row_str:
@@ -186,8 +155,7 @@ class Board:
                     c += int(ch)
                 else:
                     color = "white" if ch.isupper() else "black"
-                    kind_letter = ch.lower()
-                    PieceClass = piece_map[kind_letter]
+                    PieceClass = piece_map[ch.lower()]
                     self.grid[r][c] = PieceClass(color, self.square_size)
                     c += 1
 
