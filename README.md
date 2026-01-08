@@ -1,6 +1,7 @@
 # ♟️ Chess Trainer
 
-![Banner]([https://www.matichon.co.th/wp-content/uploads/2024/12/cc.jpg))
+
+
 
 
 **Chess Trainer** คือโปรแกรมฝึกฝนหมากรุกสากลที่พัฒนาด้วยภาษา **Python** และไลบรารี **Pygame** โดยมีการเชื่อมต่อกับ **Stockfish Engine** เพื่อช่วยวิเคราะห์เกมการเล่น ทำให้ผู้เล่นสามารถเรียนรู้และพัฒนาทักษะได้ดียิ่งขึ้น
