@@ -1,6 +1,6 @@
-# ⚔️ Chess Trainer: The Tactical Grimoire
+<img width="1200" height="800" alt="image" src="https://github.com/user-attachments/assets/3372a2c4-1a17-412a-b530-bf8df7322f3f" /># ⚔️ Chess Trainer: The Tactical Grimoire
 
-![Banner](https://via.placeholder.com/1280x300/2a2a2a/daa520?text=CHESS+TRAINER+RPG)
+![Banner](https://www.matichon.co.th/wp-content/uploads/2024/12/cc.jpg)
 *(เปลี่ยนลิงก์นี้เป็นรูป Banner เท่ๆ ของคุณ)*
 
 > "หมากรุกไม่ใช่แค่เกม... มันคือสงครามบนกระดานไม้" 🧙‍♂️
