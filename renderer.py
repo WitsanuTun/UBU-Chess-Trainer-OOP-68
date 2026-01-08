@@ -28,6 +28,7 @@ class GameRenderer:
             self.font_piece_large = pygame.font.SysFont("segoe ui symbol", 60)
             self.font_score = pygame.font.SysFont("segoe ui", 12, bold=True)
         except:
+            # Fallback fonts
             self.font_ui = pygame.font.Font(None, 20)
             self.font_ui_bold = pygame.font.Font(None, 20)
             self.font_title = pygame.font.Font(None, 28)
@@ -56,13 +57,17 @@ class GameRenderer:
     def draw_game(self, game):
         self.screen.fill(self.theme["bg_main"])
 
+        # วาดกระดาน
         game.board_visual.draw_squares(self.screen, game.board_x, game.board_y, game.board_flipped)
 
+        # วาดไฮไลท์ตาเดินล่าสุด/ตารุก
         if game.in_check and game.checked_king_pos:
             self._draw_check_square(game)
 
+        # วาดไฮไลท์ตาเดินที่เป็นไปได้ (วงกลม)
         self._draw_highlights_layer(game)
 
+        # กำหนดตัวหมากที่ต้องซ่อน (เช่น ตัวที่กำลังลาก หรือตัวที่กำลังอนิเมชัน)
         hidden_sq = None
         if game.is_dragging:
             hidden_sq = game.dragging_piece
@@ -71,14 +76,17 @@ class GameRenderer:
         elif game.board_logic.is_checkmate() and game.checked_king_pos:
             hidden_sq = game.checked_king_pos
 
+        # วาดตัวหมากทั้งหมด
         game.board_visual.draw_pieces(
             self.screen, game.board_x, game.board_y,
             game.shake_pos, game.shake_offset,
             hidden_square=hidden_sq, flipped=game.board_flipped
         )
 
+        # วาดไอคอนวิเคราะห์ (Review Mode)
         self._draw_review_icons(game)
 
+        # วาด Effect พิเศษ (ลากหมาก/อนิเมชัน/King ล้ม)
         if game.is_dragging and game.dragging_piece: self._draw_dragged_piece(game)
         if game.animation: self._draw_animated_piece(game)
 
@@ -86,31 +94,31 @@ class GameRenderer:
             self._draw_fallen_king(game)
             self._draw_checkmate_badge(game)
 
+        # วาดตัวเลขขอบกระดาน
         game.board_visual.draw_coordinates(self.screen, game.board_x, game.board_y, self.font_pgn, game.board_flipped,
                                            color=self.theme["text_main"])
 
-        # วาด Eval Bar (ถ้าเปิด Review)
+        # วาด Eval Bar
         self._draw_eval_bar_enhanced(game)
 
+        # วาด UI Panel ด้านขวา
         self._draw_panel(game)
 
+        # วาด Popup Promotion
         if game.is_promoting: self._draw_promotion_popup(game)
 
         pygame.display.flip()
 
     def _draw_eval_bar_enhanced(self, game):
-        # [FIXED] ถ้าไม่ได้เปิด Review ให้ซ่อนไปเลย
         if not game.review_mode: return
         if game.eval_cp is None and game.eval_mate is None: return
 
         bx, by = game.board_x - 35, game.board_y
         bw, bh = 16, game.square_size * 8
 
-        # [NEW] วาดกรอบสีฟ้า (Deep Sky Blue)
-        # วาดกรอบให้ใหญ่กว่าบาร์นิดนึง (padding 2px)
+        # กรอบสีฟ้า
         pygame.draw.rect(self.screen, (0, 191, 255), (bx - 2, by - 2, bw + 4, bh + 4), 2)
-
-        # พื้นหลังบาร์ (สีดำ)
+        # พื้นหลัง
         pygame.draw.rect(self.screen, (40, 40, 40), (bx, by, bw, bh))
 
         score = game.eval_cp if game.eval_cp else 0
@@ -120,10 +128,12 @@ class GameRenderer:
         ratio = (vis_score + 400) / 800
         white_h = int(bh * ratio)
 
+        # แท่งคะแนน
         pygame.draw.rect(self.screen, (240, 240, 240), (bx, by + (bh - white_h), bw, white_h))
         mid_y = by + bh // 2
         pygame.draw.line(self.screen, (100, 100, 100), (bx, mid_y), (bx + bw, mid_y), 2)
 
+        # ตัวเลขคะแนน
         score_text = ""
         if game.eval_mate:
             score_text = f"M{abs(game.eval_mate)}"
@@ -138,14 +148,20 @@ class GameRenderer:
         theme = self.theme
         rect = pygame.Rect(game.panel_x, 0, game.panel_w, game.window_height)
         pygame.draw.rect(self.screen, theme["bg_panel"], rect)
-        x, y = game.panel_x + 20, 25;
+
+        # Title
+        x = game.panel_x + 20
+        y = 25
         cw = game.panel_w - 40
         self._draw_text("Chess Trainer", x, y, self.font_title, theme["text_main"])
-        tog_w, tog_h = 54, 28;
+
+        # Theme Toggle
+        tog_w, tog_h = 54, 28
         tog_x = game.panel_x + game.panel_w - tog_w - 20
         game.ui_buttons["theme_toggle"] = self._draw_toggle(tog_x, y + 4, tog_w, tog_h, self.theme["name"] == "Dark")
 
-        icon_size = 32;
+        # Engine & Review Toggles
+        icon_size = 32
         eng_x = tog_x - icon_size - 15
         eng_rect = pygame.Rect(eng_x, y + 2, icon_size, icon_size)
         ecol = (255, 255, 255) if game.engine_enabled else (
@@ -156,7 +172,7 @@ class GameRenderer:
         self._draw_icon_centered("robot", eng_rect.center, ecol)
         game.ui_buttons["engine_toggle"] = eng_rect
 
-        rev_x = eng_x - icon_size - 10;
+        rev_x = eng_x - icon_size - 10
         rev_rect = pygame.Rect(rev_x, y + 2, icon_size, icon_size)
         rcol = (255, 255, 255) if game.review_mode else (
             (150, 150, 150) if self.theme["name"] == "Dark" else (100, 100, 100))
@@ -167,13 +183,14 @@ class GameRenderer:
         game.ui_buttons["review_toggle"] = rev_rect
         y += 65
 
+        # Engine Config Panel
         if game.engine_enabled:
-            h = 125;
+            h = 125
             card = pygame.Rect(x - 5, y - 5, cw + 10, h)
             pygame.draw.rect(self.screen, theme["card_bg"], card, border_radius=12)
             pygame.draw.rect(self.screen, theme["card_border"], card, 2, 12)
             self._draw_text("Engine Config", x + 5, y + 5, self.font_ui_bold, theme["text_main"])
-            y += 35;
+            y += 35
             bw = (cw - 10) // 2
             c_w = theme["eng_btn_active"] if game.engine_color == chess.BLACK else theme["eng_btn_inactive"]
             c_b = theme["eng_btn_active"] if game.engine_color == chess.WHITE else theme["eng_btn_inactive"]
@@ -185,29 +202,30 @@ class GameRenderer:
             elo = f"Strength: {game.engine_elo} {'▲' if game.elo_dropdown_open else '▼'}"
             game.ui_buttons["elo_head"] = self._draw_btn(elo, x, y, cw, 36)
             if game.elo_dropdown_open:
-                opts = [];
-                dy = y + 40;
+                opts = []
+                dy = y + 40
                 drop_h = len(game.elo_options) * 32 + 10
                 dd_rect = pygame.Rect(x, dy, cw, drop_h)
                 game.dropdown_data = {"rect": dd_rect, "items": []}
                 for val in game.elo_options:
                     r = pygame.Rect(x + 5, dy + 5, cw - 10, 28)
-                    game.dropdown_data["items"].append((val, r));
+                    game.dropdown_data["items"].append((val, r))
                     dy += 32
                 game.ui_buttons["elo_options"] = opts
             else:
                 game.dropdown_data = None
             y += 60
         else:
-            game.dropdown_data = None; y += 10
+            game.dropdown_data = None
+            y += 10
 
-        # [UPDATED] แสดง Best Move (ปรับสีให้ชัดขึ้น)
+        # Best Move Hint
         if game.review_mode and game.best_move_text:
-            # เลือกสี: ธีมสว่างใช้สีเข้ม, ธีมมืดใช้สีทอง
             txt_col = (20, 20, 20) if self.theme["name"] == "Light" else (255, 215, 0)
             bst_surf = self.font_ui_bold.render(f"Best: {game.best_move_text}", True, txt_col)
             self.screen.blit(bst_surf, (x + 5, y - 25))
 
+        # Status Bar
         st_col = theme["btn_idle"]
         if game.game_over:
             if "wins" in game.game_result_msg:
@@ -225,6 +243,7 @@ class GameRenderer:
         self._draw_text(msg, x + 50, y + 11, self.font_ui_bold, st_txt_col)
         y += 58
 
+        # Control Buttons
         nw = 45
         game.ui_buttons["prev"] = self._draw_btn("◀", x, y, nw, 40, font=self.font_arrow)
         game.ui_buttons["next"] = self._draw_btn("▶", x + nw + 10, y, nw, 40, font=self.font_arrow)
@@ -240,12 +259,14 @@ class GameRenderer:
                                                    (255, 255, 255))
         y += 55
 
+        # PGN History List
         self._draw_text("Move History", x, y, self.font_ui_bold, theme["text_main"])
         y += 30
         lh = game.window_height - y - 35
         game.pgn_view_rect = pygame.Rect(x, y, cw, lh)
         self._draw_pgn_list(game, game.pgn_view_rect)
 
+        # Dropdown (Popup)
         if game.dropdown_data:
             dd = game.dropdown_data
             pygame.draw.rect(self.screen, (0, 0, 0, 50), dd["rect"].move(0, 4), border_radius=12)
@@ -267,6 +288,7 @@ class GameRenderer:
         self._draw_text("#", rect.x + 10, rect.y + 7, self.font_pgn, theme["text_light"])
         self._draw_text("White", rect.x + 50, rect.y + 7, self.font_pgn, theme["text_light"])
         self._draw_text("Black", rect.x + 145, rect.y + 7, self.font_pgn, theme["text_light"])
+
         content = rect.inflate(-4, -(hh + 4))
         content.top += hh
         row_h = 28
@@ -275,16 +297,20 @@ class GameRenderer:
         vis_h = content.height
         game.max_scroll_y = max(0, total_h - vis_h)
         game.pgn_scroll_y = max(0, min(game.pgn_scroll_y, game.max_scroll_y))
+
         old_clip = self.screen.get_clip()
         self.screen.set_clip(content)
         start_y = content.top - game.pgn_scroll_y
         game.pgn_click_zones = []
+
         for i in range(0, len(game.move_history_san), 2):
             y = start_y + (i // 2) * row_h
             if y + row_h < content.top: continue
             if y > content.bottom: break
             if (i // 2) % 2 == 1: pygame.draw.rect(self.screen, theme["pgn_zebra"], (rect.x + 2, y, rect.w - 4, row_h))
             self._draw_text(f"{i // 2 + 1}.", rect.x + 10, y + 6, self.font_pgn, theme["text_light"])
+
+            # White Move
             wr = pygame.Rect(rect.x + 45, y + 2, 85, 24)
             if game.current_move_idx == i + 1:
                 pygame.draw.rect(self.screen, theme["highlight"], wr, border_radius=6)
@@ -293,6 +319,8 @@ class GameRenderer:
                 tcol = theme["text_main"]
             self._draw_text(game.move_history_san[i], rect.x + 50, y + 6, self.font_pgn, tcol)
             game.pgn_click_zones.append((i, wr))
+
+            # Black Move
             if i + 1 < len(game.move_history_san):
                 br = pygame.Rect(rect.x + 140, y + 2, 85, 24)
                 if game.current_move_idx == i + 2:
@@ -302,6 +330,7 @@ class GameRenderer:
                     tcol = theme["text_main"]
                 self._draw_text(game.move_history_san[i + 1], rect.x + 145, y + 6, self.font_pgn, tcol)
                 game.pgn_click_zones.append((i + 1, br))
+
         self.screen.set_clip(old_clip)
         if total_h > vis_h:
             track = pygame.Rect(rect.right - 10, content.top + 2, 8, vis_h - 4)
@@ -340,9 +369,6 @@ class GameRenderer:
         x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
         col = self.theme["mate_bg"] if game.board_logic.is_checkmate() else self.theme["check_bg"]
         pygame.draw.rect(self.screen, col, (x, y, game.square_size, game.square_size))
-
-    def _draw_premove(self, game):
-        pass
 
     def _draw_highlights_layer(self, game):
         if game.selected_square:
@@ -383,18 +409,18 @@ class GameRenderer:
         arrow = end_vec - start_vec
         length = arrow.length()
         if length < 1: return
-        shaft_w = s * 0.18;
-        head_w = s * 0.45;
+        shaft_w = s * 0.18
+        head_w = s * 0.45
         head_h = s * 0.35
         if length < s * 1.2: head_h, head_w = s * 0.3, s * 0.4
-        direction = arrow.normalize();
+        direction = arrow.normalize()
         perp = pygame.Vector2(-direction.y, direction.x)
-        p1 = start_vec + perp * (shaft_w / 2);
+        p1 = start_vec + perp * (shaft_w / 2)
         p2 = start_vec - perp * (shaft_w / 2)
         neck = end_vec - direction * head_h
-        p3 = neck - perp * (shaft_w / 2);
+        p3 = neck - perp * (shaft_w / 2)
         p4 = neck + perp * (shaft_w / 2)
-        p5 = neck - perp * (head_w / 2);
+        p5 = neck - perp * (head_w / 2)
         p6 = neck + perp * (head_w / 2)
         pygame.draw.polygon(surface, color, [p2, p3, p5, end_vec, p6, p4, p1])
 
@@ -434,18 +460,15 @@ class GameRenderer:
                                  self.theme["text_main"])
         opts = ["queen", "rook", "bishop", "knight"]
         syms = {"queen": "♛", "rook": "♜", "bishop": "♝", "knight": "♞"}
-        bs = 90;
-        gap = 20;
-        sx = x + (pw - (bs * 4 + gap * 3)) // 2;
+        bs = 90
+        gap = 20
+        sx = x + (pw - (bs * 4 + gap * 3)) // 2
         by = y + 95
         game.promotion_data["rects"] = {}
         for i, name in enumerate(opts):
             bx = sx + i * (bs + gap)
             r = self._draw_btn(syms[name], bx, by, bs, bs, font=self.font_piece_large)
             game.promotion_data["rects"][name] = r
-
-    def _draw_draw_popup(self, game):
-        pass
 
     def _draw_btn(self, text, x, y, w, h, base_color=None, hover_color=None, text_color=None, font=None):
         if base_color is None: base_color = self.theme["btn_idle"]
@@ -463,7 +486,7 @@ class GameRenderer:
     def _draw_toggle(self, x, y, w, h, is_on):
         r = pygame.Rect(x, y, w, h)
         pygame.draw.rect(self.screen, self.theme["toggle_bg"], r, border_radius=h // 2)
-        p = 3;
+        p = 3
         s = h - p * 2
         tx = x + w - s - p if is_on else x + p
         tr = pygame.Rect(tx, y + p, s, s)

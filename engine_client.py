@@ -1,182 +1,131 @@
-# engine_client.py
-from __future__ import annotations
-
 import os
-from pathlib import Path
-from typing import Optional
-
 import chess
 import chess.engine
+from pathlib import Path
 
 
 class EngineClient:
-    """
-    ตัวห่อ Stockfish แบบง่าย ๆ
-
-    ใช้ได้ 3 อย่างหลัก ๆ
-    - set_elo(): ตั้งระดับความเก่ง (map ไปเป็น UCI_Elo / Skill Level)
-    - choose_move(): ให้คอมเดิน 1 ท่า
-    - analyse_position(): ให้คอมประเมินตำแหน่งปัจจุบัน (eval bar / best move)
-    """
-
-    def __init__(
-        self,
-        engine_path: Optional[str] = None,
-        elo: int = 1200,
-        think_time: float = 0.2,
-    ) -> None:
-        # หา path engine เองถ้าไม่ได้ส่งมา
+    def __init__(self, engine_path=None, elo=1200, think_time=0.2):
         if engine_path is None:
+            # Auto-detect engine path
             base_dir = Path(__file__).resolve().parent
             engine_path = base_dir / "engine/stockfish/stockfish.exe"
 
         self.engine_path = str(engine_path)
         self.think_time = float(think_time)
+        self.elo = elo
 
-        self._engine: Optional[chess.engine.SimpleEngine] = None
+        self._engine = None
         self._opened = False
 
-        self.elo = 1200
+        self.open()
+        # เรียก set_elo ทันทีหลังจากเปิด
         self.set_elo(elo)
 
-        self.open()
-
-    # ------------------------------------------------------------------
-    #  เปิด / ปิด engine
-    # ------------------------------------------------------------------
-    def open(self) -> None:
+    def open(self):
         if self._opened:
             return
 
         if not os.path.exists(self.engine_path):
-            raise FileNotFoundError(
-                f"ไม่พบ engine ที่ {self.engine_path} "
-                f"(อย่าลืมแตกไฟล์ stockfish แล้วชี้ path ให้ถูก)"
-            )
+            raise FileNotFoundError(f"Engine not found at: {self.engine_path}")
 
-        self._engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
-        self._opened = True
-        self._apply_elo_to_engine()
+        try:
+            self._engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+            self._opened = True
+            # ไม่เรียก _apply_elo_to_engine() ที่นี่ รอให้ __init__ เรียก set_elo เอง
+        except Exception as e:
+            print(f"Failed to start engine: {e}")
 
-    def close(self) -> None:
-        if self._opened and self._engine is not None:
+    def close(self):
+        if self._opened and self._engine:
             try:
                 self._engine.quit()
-            except Exception:
+            except:
                 pass
         self._engine = None
         self._opened = False
 
-    def __del__(self) -> None:
-        self.close()
-
-    # ------------------------------------------------------------------
-    #  การตั้งค่า ELO / think_time
-    # ------------------------------------------------------------------
-    def set_think_time(self, seconds: float) -> None:
-        self.think_time = max(0.01, float(seconds))
-
-    def set_elo(self, elo: int) -> None:
-        elo = int(elo)
-        elo = max(100, min(elo, 3200))
-        self.elo = elo
-
-        if self._opened and self._engine is not None:
+    def set_elo(self, elo):
+        # รับค่าดิบมาก่อน
+        self.elo = int(elo)
+        if self._opened:
             self._apply_elo_to_engine()
 
-    def _apply_elo_to_engine(self) -> None:
-        if not self._opened or self._engine is None:
-            return
+    def _apply_elo_to_engine(self):
+        if not self._engine: return
 
-        info = self._engine.options
-        updates = {}
+        options = self._engine.options
+        config = {}
 
-        # 1) UCI_Elo / UCI_LimitStrength ถ้ามี
-        if "UCI_LimitStrength" in info and "UCI_Elo" in info:
-            min_elo = info["UCI_Elo"].min
-            max_elo = info["UCI_Elo"].max
-            target_elo = max(min_elo, min(max_elo, self.elo))
+        # Option 1: UCI_LimitStrength (Standard for Stockfish 11+)
+        if "UCI_LimitStrength" in options and "UCI_Elo" in options:
+            # [FIXED] ดึงค่า Min/Max จริงจาก Engine มาเช็คก่อน
+            min_elo = options["UCI_Elo"].min
+            max_elo = options["UCI_Elo"].max
 
-            updates["UCI_LimitStrength"] = True
-            updates["UCI_Elo"] = target_elo
+            # บังคับค่าให้อยู่ในช่วงที่ Engine รับได้ (Clamp)
+            # ถ้าขอ 1200 แต่ Engine รับต่ำสุด 1320 -> มันจะส่ง 1320 ไปแทน
+            target_elo = max(min_elo, min(self.elo, max_elo))
 
-        # 2) Skill Level 0–20 (บางเวอร์ชันของ stockfish มี)
-        if "Skill Level" in info:
-            elo_min, elo_max = 100, 3200
-            ratio = (self.elo - elo_min) / (elo_max - elo_min)
-            skill = int(round(ratio * 20))
-            skill = max(0, min(20, skill))
-            updates["Skill Level"] = skill
+            config["UCI_LimitStrength"] = True
+            config["UCI_Elo"] = target_elo
 
-        if updates:
-            self._engine.configure(updates)
+        # Option 2: Skill Level (Older Stockfish)
+        elif "Skill Level" in options:
+            # Map ELO 100-3200 to Skill Level 0-20
+            skill = int((self.elo - 100) / (3200 - 100) * 20)
+            config["Skill Level"] = max(0, min(20, skill))
 
-    # ------------------------------------------------------------------
-    #  ให้คอมเดิน (เล่นกับ engine)
-    # ------------------------------------------------------------------
-    def choose_move(self, board: chess.Board) -> Optional[chess.Move]:
-        """
-        ให้ engine คิดแล้วคืน move 1 ท่า
-        ถ้าเดินไม่ได้ (เช่น เมต/ตัน) คืน None
-        """
-        if not self._opened or self._engine is None:
-            self.open()
+        if config:
+            try:
+                self._engine.configure(config)
+            except Exception as e:
+                print(f"Warning: Could not configure engine Elo: {e}")
 
-        if board.is_game_over():
-            return None
+    def choose_move(self, board):
+        if not self._opened: self.open()
+        if board.is_game_over(): return None
 
         limit = chess.engine.Limit(time=self.think_time)
-
         try:
             result = self._engine.play(board, limit)
+            return result.move
         except chess.engine.EngineTerminatedError:
+            # Retry once if engine crashed
             self.close()
             self.open()
-            result = self._engine.play(board, limit)
+            return self._engine.play(board, limit).move
+        except:
+            return None
 
-        return result.move
+    def analyse_position(self, board, think_time=None):
+        if not self._opened: self.open()
 
-    # ------------------------------------------------------------------
-    #  วิเคราะห์ตำแหน่ง (ใช้กับ Review mode / eval bar)
-    # ------------------------------------------------------------------
-    def analyse_position(
-        self,
-        board: chess.Board,
-        think_time: Optional[float] = None,
-    ) -> Optional[dict]:
-        """
-        วิเคราะห์ตำแหน่งบนกระดาน แล้วคืน dict:
-
-        {
-            "cp":   int | None   # centipawn จากมุมมองฝั่งขาว
-            "mate": int | None   # mate in N (ถ้าเป็น mate)
-            "best_move": chess.Move | None
-        }
-        """
-        if think_time is None:
-            think_time = self.think_time
-
-        if not self._opened or self._engine is None:
-            self.open()
-
-        limit = chess.engine.Limit(time=think_time)
-
+        limit = chess.engine.Limit(time=think_time or self.think_time)
         try:
             info = self._engine.analyse(board, limit, info=chess.engine.INFO_ALL)
         except chess.engine.EngineTerminatedError:
             self.close()
             self.open()
-            info = self._engine.analyse(board, limit, info=chess.engine.INFO_ALL)
+            try:
+                info = self._engine.analyse(board, limit, info=chess.engine.INFO_ALL)
+            except:
+                return None
 
+        # Extract Score
         score_obj = info["score"].pov(chess.WHITE)
         mate = score_obj.mate()
-        cp = None if mate is not None else score_obj.score()
+        cp = score_obj.score() if mate is None else None
 
+        # Extract Best Move
         pv = info.get("pv", [])
         best_move = pv[0] if pv else None
 
         return {
             "cp": cp,
             "mate": mate,
-            "best_move": best_move,
+            "best_move": best_move
         }
+
+    def __del__(self):
+        self.close()

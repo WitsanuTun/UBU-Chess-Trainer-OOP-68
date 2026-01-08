@@ -9,30 +9,15 @@ import math
 from settings import *
 from board import Board
 from renderer import GameRenderer
-
-# Safe Import for Engine/Review
-try:
-    from engine_client import EngineClient
-    from review import GameReviewer
-except ImportError:
-    print("Warning: Missing engine_client.py or review.py")
-
-
-    class EngineClient:
-        def __init__(self, **k): pass
-
-        def close(self): pass
-
-
-    class GameReviewer:
-        def __init__(self, e): pass
+from engine_client import EngineClient
+from review import GameReviewer
 
 
 class Game:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
-        pygame.display.set_caption("Chess Trainer - Eval Fixed")
+        pygame.display.set_caption("Chess Trainer - Final Project")
 
         # View
         self.renderer = GameRenderer(self.screen)
@@ -76,7 +61,6 @@ class Game:
         # Special Actions
         self.is_promoting = False
         self.promotion_data = {}
-        self.is_offering_draw = False
 
         # Input State
         self.is_dragging = False
@@ -95,9 +79,8 @@ class Game:
         self.ui_buttons = {}
         self.dropdown_data = None
 
-        # Features
-        self.premove = None
-        self.premove_squares = []
+        # Animation & Visuals
+        self.premove_squares = []  # เก็บไว้เป็น list ว่าง เพื่อกัน Renderer Error
         self.animation = None
         self.shake_pos = None
         self.shake_offset = (0, 0)
@@ -111,7 +94,7 @@ class Game:
         self.elo_dropdown_open = False
         self.elo_options = [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000]
 
-        # Dual Engine Setup
+        # Dual Engine Setup (แยก Engine เล่น กับ Engine วิเคราะห์)
         self.engine = EngineClient(elo=self.engine_elo, think_time=0.5)
         self.analysis_engine = EngineClient(elo=3000, think_time=0.1)
 
@@ -123,13 +106,17 @@ class Game:
     def recalculate_layout(self):
         self.window_width, self.window_height = self.screen.get_size()
         w, h = self.window_width, self.window_height
+
         margin = 45
         self.panel_w = 360
+
         avail_w = w - (margin * 2) - self.panel_w - 25
         avail_h = h - (margin * 2)
         sq_size = max(32, min(avail_w // 8, avail_h // 8))
+
         self.square_size = sq_size
         self.board_visual.set_square_size(sq_size)
+
         bsize = sq_size * 8
         self.board_x = max(margin, (w - bsize - self.panel_w - 25) // 2)
         self.board_y = margin
@@ -138,10 +125,12 @@ class Game:
     def reset_game(self):
         self.board_logic.reset()
         self.board_visual.load_from_fen(self.board_logic.board_fen())
+
         self.turn_color = "white"
         self.board_flipped = False
         if self.engine_enabled and self.engine_color == chess.WHITE:
             self.board_flipped = True
+
         self.move_history_san = []
         self.move_history_obj = []
         self.current_move_idx = 0
@@ -153,13 +142,12 @@ class Game:
         self.checked_king_pos = None
         self.is_promoting = False
         self.engine_locked = False
+
         self.user_arrows = []
         self.user_highlights = []
-        self.premove = None
-        self.premove_squares = []
 
         self.analysis_results = []
-        self.review_mode = False  # Reset review mode
+        self.review_mode = False
         self.best_move_text = ""
         self.eval_cp = None
         self.eval_mate = None
@@ -180,10 +168,12 @@ class Game:
                         self.process_move(event.engine_move, animate=True)
                 else:
                     self.handle_event(event)
+
             self.update_shake()
             self.update_animation()
             self.renderer.draw_game(self)
             self.clock.tick(60)
+
         self.engine.close()
         self.analysis_engine.close()
         pygame.quit()
@@ -202,13 +192,16 @@ class Game:
             elif event.button in (4, 5):
                 d = 1 if event.button == 4 else -1
                 self.pgn_scroll_y = max(0, min(self.max_scroll_y, self.pgn_scroll_y - d * 20))
+
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 self._handle_release(event.pos)
             elif event.button == 3:
                 self._handle_rclick_up(event.pos)
+
         elif event.type == pygame.MOUSEWHEEL:
             self.pgn_scroll_y = max(0, min(self.max_scroll_y, self.pgn_scroll_y - event.y * 20))
+
         elif event.type == pygame.MOUSEMOTION:
             if self.is_dragging_scrollbar:
                 new_y = event.pos[1] - self.drag_offset_y
@@ -217,6 +210,7 @@ class Game:
                 if track and thumb:
                     ratio = (new_y - track.top) / (track.height - thumb.height)
                     self.pgn_scroll_y = max(0, min(self.max_scroll_y, int(ratio * self.max_scroll_y)))
+
         elif event.type == pygame.KEYDOWN:
             if not self.is_promoting:
                 if event.key == pygame.K_LEFT:
@@ -225,9 +219,15 @@ class Game:
                     self.jump_to_move(self.current_move_idx + 1)
 
     def _handle_click(self, pos):
-        if self.user_arrows or self.user_highlights: self.user_arrows = []; self.user_highlights = []
+        if self.user_arrows or self.user_highlights:
+            self.user_arrows = [];
+            self.user_highlights = []
+
         x, y = pos
-        if x >= self.panel_x: self._handle_panel_click(pos); return
+        if x >= self.panel_x:
+            self._handle_panel_click(pos)
+            return
+
         if self.game_over: return
         if self.current_move_idx != len(self.move_history_obj): return
 
@@ -242,49 +242,63 @@ class Game:
 
         r, c = self.screen_to_board(x, y)
         piece = self.board_visual.get_piece(r, c)
+
         if self.animation: return
 
         if piece and piece.color == self.turn_color:
-            self.is_dragging = True;
-            self.dragging_piece = (r, c);
+            self.is_dragging = True
+            self.dragging_piece = (r, c)
             self.selected_square = (r, c)
             self.valid_moves = []
             src = chess.square(c, 7 - r)
             for m in self.board_logic.legal_moves:
-                if m.from_square == src: self.valid_moves.append(self._chess_sq_to_rowcol(m.to_square))
+                if m.from_square == src:
+                    self.valid_moves.append(self._chess_sq_to_rowcol(m.to_square))
         elif (r, c) in self.valid_moves:
             self._execute_move(r, c)
         else:
-            self.selected_square = None; self.valid_moves = []
+            self.selected_square = None;
+            self.valid_moves = []
 
     def _handle_release(self, pos):
         self.is_dragging_scrollbar = False
         is_my_turn = not (self.engine_enabled and self.board_logic.turn == self.engine_color)
-        if not is_my_turn: self.is_dragging = False; self.dragging_piece = None; return
+
+        if not is_my_turn:
+            self.is_dragging = False;
+            self.dragging_piece = None;
+            return
 
         if self.is_dragging and self.dragging_piece:
             x, y = pos
             if self.board_x <= x < self.board_x + self.square_size * 8 and self.board_y <= y < self.board_y + self.square_size * 8:
                 dr, dc = self.screen_to_board(x, y)
                 if (dr, dc) != self.dragging_piece:
-                    if (dr, dc) in self.valid_moves: self._execute_move(dr, dc)
+                    if (dr, dc) in self.valid_moves:
+                        self._execute_move(dr, dc)
             self.is_dragging = False;
             self.dragging_piece = None
 
     def _execute_move(self, r, c):
         start = self.selected_square
         if start is None: return
+
         p = self.board_visual.get_piece(*start)
+        # ตรวจสอบ Promotion
         if p and p.kind == "pawn" and ((p.color == "white" and r == 0) or (p.color == "black" and r == 7)):
-            self.is_promoting = True;
+            self.is_promoting = True
             self.promotion_data = {"from": start, "to": (r, c), "color": p.color}
             self.selected_square = None;
             self.valid_moves = [];
             return
-        src = self.rowcol_to_uci(*start);
+
+        src = self.rowcol_to_uci(*start)
         dst = self.rowcol_to_uci(r, c)
         move = chess.Move.from_uci(src + dst)
-        if move in self.board_logic.legal_moves: self.process_move(move, animate=True)
+
+        if move in self.board_logic.legal_moves:
+            self.process_move(move, animate=True)
+
         self.selected_square = None;
         self.valid_moves = []
 
@@ -363,7 +377,6 @@ class Game:
         self.turn_color = "white" if self.board_logic.turn == chess.WHITE else "black"
         self.game_over = False
         self.game_result_msg = ""
-        self.premove = None
         self.analysis_results = []
         self.selected_square = None
         self.valid_moves = []
@@ -409,16 +422,18 @@ class Game:
             w = "Black" if self.board_logic.turn == chess.WHITE else "White"
             self.game_result_msg = f"Checkmate! {w} wins."
         elif self.board_logic.is_stalemate():
-            self.game_over = True; self.game_result_msg = "Draw (Stalemate)"
+            self.game_over = True;
+            self.game_result_msg = "Draw (Stalemate)"
         elif self.board_logic.is_insufficient_material():
-            self.game_over = True; self.game_result_msg = "Draw (Material)"
+            self.game_over = True;
+            self.game_result_msg = "Draw (Material)"
         elif self.board_logic.can_claim_threefold_repetition():
-            self.game_over = True; self.game_result_msg = "Draw (Repetition)"
+            self.game_over = True;
+            self.game_result_msg = "Draw (Repetition)"
         self.checked_king_pos = self.get_king_pos() if self.in_check else None
         if self.in_check: self.shake_pos = self.checked_king_pos; self.shake_timer = 25
 
     def analyze_board(self):
-        # [FIXED] ถ้าไม่เปิดโหมด Review ไม่ต้องวิเคราะห์
         if not self.review_mode: return
 
         def task():
@@ -478,6 +493,7 @@ class Game:
         k = self.board_logic.king(self.board_logic.turn)
         return self._chess_sq_to_rowcol(k) if k is not None else None
 
+    # --- UI Events Handlers ---
     def _handle_panel_click(self, pos):
         x, y = pos
         b = self.ui_buttons
@@ -490,8 +506,6 @@ class Game:
             if self.review_mode and not self.analysis_results and not self.is_analyzing and len(
                     self.move_history_obj) > 0:
                 threading.Thread(target=self._run_review, daemon=True).start()
-
-            # [FIXED] สั่งวิเคราะห์ทันทีที่เปิดโหมด Review
             self.analyze_board()
 
         if self.engine_enabled:
@@ -499,23 +513,28 @@ class Game:
             if b.get("side_black") and b["side_black"].collidepoint(x, y): self.engine_color = chess.WHITE
             if b.get("elo_head") and b["elo_head"].collidepoint(x,
                                                                 y): self.elo_dropdown_open = not self.elo_dropdown_open
+
         if b.get("new") and b["new"].collidepoint(x, y): self.reset_game()
         if b.get("flip") and b["flip"].collidepoint(x, y): self.board_flipped = not self.board_flipped
         if b.get("pgn") and b["pgn"].collidepoint(x, y): self.copy_pgn()
         if b.get("undo") and b["undo"].collidepoint(x, y): self.undo_move()
         if b.get("resign") and b["resign"].collidepoint(x, y):
             if not self.game_over: self.game_over = True; self.game_result_msg = "Resigned."
+
         if b.get("prev") and b["prev"].collidepoint(x, y): self.jump_to_move(self.current_move_idx - 1)
         if b.get("next") and b["next"].collidepoint(x, y): self.jump_to_move(self.current_move_idx + 1)
+
         if b.get("scrollbar_track") and b["scrollbar_track"].collidepoint(x, y):
             if b["scrollbar_thumb"].collidepoint(x, y):
-                self.is_dragging_scrollbar = True; self.drag_offset_y = y - b["scrollbar_thumb"].top
+                self.is_dragging_scrollbar = True;
+                self.drag_offset_y = y - b["scrollbar_thumb"].top
             else:
                 if y < b["scrollbar_thumb"].top:
                     self.pgn_scroll_y -= 100
                 else:
                     self.pgn_scroll_y += 100
                 self.pgn_scroll_y = max(0, min(self.max_scroll_y, self.pgn_scroll_y))
+
         for idx, rect in self.pgn_click_zones:
             if rect.collidepoint(x, y): self.jump_to_move(idx + 1); break
 
@@ -570,9 +589,6 @@ class Game:
                 else:
                     self.user_arrows.append(arr)
         self.right_click_start = None
-
-    def _set_premove(self, start, end):
-        pass
 
     def toggle_theme(self):
         self.is_dark_mode = not self.is_dark_mode

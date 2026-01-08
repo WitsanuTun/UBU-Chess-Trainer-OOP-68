@@ -1,25 +1,22 @@
-#piece.py
 import pygame
 import os
 
-# กำหนดขนาดและโฟลเดอร์รูปภาพ
 DEFAULT_SQUARE_SIZE = 80
-ASSET_DIR = "assets/pieces"  # ตรวจสอบว่า folder นี้มีอยู่จริง
+ASSET_DIR = "assets/pieces"
 
 
 class ChessPiece:
     def __init__(self, color: str, kind: str, square_size: int):
-        self.color = color  # "white" หรือ "black"
-        self.kind = kind  # "pawn", "rook", ...
+        self.color = color  # "white" or "black"
+        self.kind = kind  # "pawn", "rook", etc.
 
-        # สร้าง path รูปภาพอัตโนมัติ เช่น assets/pieces/white_pawn.png
-        # (ไม่ต้องส่ง path ยาวๆ มาตอนสร้าง object แล้ว)
+        # Auto-generate image path
         self.image_path = os.path.join(ASSET_DIR, f"{color}_{kind}.png")
 
         try:
             self.base_image = pygame.image.load(self.image_path).convert_alpha()
         except FileNotFoundError:
-            # ถ้าหาไม่เจอ สร้างสี่เหลี่ยมสีแดงแทน (กันโปรแกรมพัง)
+            # Fallback if image missing
             print(f"Warning: Image not found at {self.image_path}")
             self.base_image = pygame.Surface((square_size, square_size))
             self.base_image.fill((255, 0, 0))
@@ -41,13 +38,7 @@ class ChessPiece:
         if self.image:
             screen.blit(self.image, (x, y))
 
-    def get_valid_moves(self, board):
-        # เดี๋ยวเราค่อยมาเติม Logic พิเศษตรงนี้ถ้าต้องการ
-        pass
-
-
-# --- สร้าง Class ลูก (Inheritance) ---
-# เพื่อให้เรียกใช้ง่ายๆ เช่น Pawn("white", 80)
+# --- Subclasses (Inheritance Implementation) ---
 
 class Pawn(ChessPiece):
     def __init__(self, color, square_size):
