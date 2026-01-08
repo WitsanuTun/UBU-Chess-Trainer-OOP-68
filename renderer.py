@@ -23,11 +23,20 @@ class GameRenderer:
             self.font_title = pygame.font.SysFont("segoe ui", 26, bold=True)
             self.font_pgn = pygame.font.SysFont("consolas", 14)
             self.font_arrow = pygame.font.SysFont("segoe ui symbol", 20)
-            self.font_mate = pygame.font.SysFont("arial", 28, bold=True)  # เพิ่มขนาดฟอนต์ #
+            self.font_mate = pygame.font.SysFont("arial", 28, bold=True)
             self.font_icon = pygame.font.SysFont("segoe ui symbol", 20)
             self.font_piece_large = pygame.font.SysFont("segoe ui symbol", 60)
+            self.font_score = pygame.font.SysFont("segoe ui", 12, bold=True)
         except:
             self.font_ui = pygame.font.Font(None, 20)
+            self.font_ui_bold = pygame.font.Font(None, 20)
+            self.font_title = pygame.font.Font(None, 28)
+            self.font_pgn = pygame.font.Font(None, 20)
+            self.font_arrow = pygame.font.Font(None, 24)
+            self.font_mate = pygame.font.Font(None, 32)
+            self.font_icon = pygame.font.Font(None, 22)
+            self.font_piece_large = pygame.font.Font(None, 60)
+            self.font_score = pygame.font.Font(None, 18)
 
     def _load_all_icons(self):
         def load(name, size):
@@ -47,198 +56,83 @@ class GameRenderer:
     def draw_game(self, game):
         self.screen.fill(self.theme["bg_main"])
 
-        # 1. วาดกระดาน
         game.board_visual.draw_squares(self.screen, game.board_x, game.board_y, game.board_flipped)
 
-        # 2. ไฮไลท์พื้นหลัง (Check / Premove)
         if game.in_check and game.checked_king_pos:
             self._draw_check_square(game)
-        if game.premove_squares:
-            self._draw_premove(game)
+
         self._draw_highlights_layer(game)
 
-        # 3. คำนวณว่าจะ "ซ่อน" หมากตัวไหน (ตัวที่ลากอยู่ หรือ ตัวที่กำลังตาย/อนิเมชั่น หรือ **คิงที่ตายแล้ว**)
         hidden_sq = None
         if game.is_dragging:
             hidden_sq = game.dragging_piece
         elif game.animation:
             hidden_sq = game.animation["hide_square"]
         elif game.board_logic.is_checkmate() and game.checked_king_pos:
-            # [IMPORTANT] ซ่อนคิงตัวปกติ เพื่อจะวาดตัวล้มแทน
             hidden_sq = game.checked_king_pos
 
-        # 4. วาดตัวหมากปกติ (ยกเว้นตัวที่ซ่อน)
         game.board_visual.draw_pieces(
             self.screen, game.board_x, game.board_y,
             game.shake_pos, game.shake_offset,
             hidden_square=hidden_sq, flipped=game.board_flipped
         )
 
-        # 5. วาดไอคอนรีวิว
         self._draw_review_icons(game)
 
-        # 6. วาดเอฟเฟกต์พิเศษ (ลาก / อนิเมชั่น / คิงล้ม)
         if game.is_dragging and game.dragging_piece: self._draw_dragged_piece(game)
         if game.animation: self._draw_animated_piece(game)
 
-        # [NEW] วาดคิงล้ม (Rotated King) ถ้า Checkmate
         if game.board_logic.is_checkmate() and game.checked_king_pos:
             self._draw_fallen_king(game)
-            self._draw_checkmate_badge(game)  # วาดเครื่องหมาย # ทับบนสุด
+            self._draw_checkmate_badge(game)
 
-        # 7. UI ส่วนที่เหลือ
-        game.board_visual.draw_coordinates(
-            self.screen,
-            game.board_x,
-            game.board_y,
-            self.font_pgn,
-            game.board_flipped,
-            color=self.theme["coord_color"]  # <--- สำคัญมาก! ต้องใส่บรรทัดนี้
-        )
-        if game.review_mode: self._draw_eval_bar(game)
+        game.board_visual.draw_coordinates(self.screen, game.board_x, game.board_y, self.font_pgn, game.board_flipped,
+                                           color=self.theme["text_main"])
+
+        # วาด Eval Bar (ถ้าเปิด Review)
+        self._draw_eval_bar_enhanced(game)
+
         self._draw_panel(game)
+
         if game.is_promoting: self._draw_promotion_popup(game)
 
         pygame.display.flip()
 
-    # --- NEW: ฟังก์ชันวาดคิงล้ม ---
-    def _draw_fallen_king(self, game):
-        r, c = game.checked_king_pos
-        piece = game.board_visual.get_piece(r, c)
-        if piece and piece.image:
-            # หมุนภาพ 90 องศา (นอนตาย)
-            rotated_img = pygame.transform.rotate(piece.image, -90)  # ล้มไปทางขวา
-
-            # คำนวณตำแหน่ง
-            x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
-
-            # จัดกึ่งกลางภาพหมุนให้ตรงช่อง
-            rect = rotated_img.get_rect()
-            rect.center = (x + game.square_size // 2, y + game.square_size // 2)
-
-            self.screen.blit(rotated_img, rect)
-
-    def _draw_checkmate_badge(self, game):
-        r, c = game.checked_king_pos
-        x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
-        s = game.square_size
-
-        # วาด Badge # มุมขวาบน
-        bx, by = x + s - 10, y + 10
-        pygame.draw.circle(self.screen, (0, 0, 0, 80), (bx + 2, by + 2), 16)  # เงา
-        pygame.draw.circle(self.screen, self.theme["mate_badge"], (bx, by), 16)  # พื้นหลังแดง
-        pygame.draw.circle(self.screen, (255, 255, 255), (bx, by), 16, 2)  # ขอบขาว
-
-        txt = self.font_mate.render("#", True, (255, 255, 255))
-        tr = txt.get_rect(center=(bx, by))
-        self.screen.blit(txt, tr)
-
-    # --- ฟังก์ชันเดิม (คงไว้) ---
-    def _draw_check_square(self, game):
-        r, c = game.checked_king_pos
-        x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
-        col = self.theme["mate_bg"] if game.board_logic.is_checkmate() else self.theme["check_bg"]
-        pygame.draw.rect(self.screen, col, (x, y, game.square_size, game.square_size))
-
-    def _draw_premove(self, game):
-        s = game.square_size
-        overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-        for r, c in game.premove_squares:
-            x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
-            pygame.draw.rect(overlay, self.theme["premove"], (x, y, s, s))
-        self.screen.blit(overlay, (0, 0))
-
-    def _draw_highlights_layer(self, game):
-        if game.selected_square:
-            s = game.square_size
-            overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-            for r, c in game.valid_moves:
-                x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
-                cx, cy = x + s // 2, y + s // 2
-                piece = game.board_visual.get_piece(r, c)
-                if piece:
-                    pygame.draw.circle(overlay, self.theme["capture_hint"], (cx, cy), s // 2 - 2, 6)
-                else:
-                    pygame.draw.circle(overlay, self.theme["move_hint"], (cx, cy), s // 6)
-            self.screen.blit(overlay, (0, 0))
-
-        overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-        for r, c in game.user_highlights:
-            x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
-            pygame.draw.rect(overlay, self.theme["highlight_green"], (x, y, game.square_size, game.square_size))
-
-        for start, end in game.user_arrows:
-            self._draw_arrow(overlay, game, start, end, self.theme["arrow_green"])
-
-        if game.right_click_start:
-            mx, my = pygame.mouse.get_pos()
-            if game.board_x <= mx < game.board_x + game.square_size * 8 and game.board_y <= my < game.board_y + game.square_size * 8:
-                curr = game.screen_to_board(mx, my)
-                if curr != game.right_click_start:
-                    self._draw_arrow(overlay, game, game.right_click_start, curr, self.theme["arrow_green"])
-        self.screen.blit(overlay, (0, 0))
-
-    def _draw_arrow(self, surface, game, start, end, color):
-        s = game.square_size
-        sx, sy = game.board_visual.to_screen(start[0], start[1], game.board_x, game.board_y, game.board_flipped)
-        ex, ey = game.board_visual.to_screen(end[0], end[1], game.board_x, game.board_y, game.board_flipped)
-        start_vec = pygame.Vector2(sx + s / 2, sy + s / 2)
-        end_vec = pygame.Vector2(ex + s / 2, ey + s / 2)
-        arrow = end_vec - start_vec
-        length = arrow.length()
-        if length < 1: return
-        shaft_w = s * 0.18;
-        head_w = s * 0.45;
-        head_h = s * 0.35
-        if length < s * 1.2: head_h, head_w = s * 0.3, s * 0.4
-        direction = arrow.normalize();
-        perp = pygame.Vector2(-direction.y, direction.x)
-        p1 = start_vec + perp * (shaft_w / 2);
-        p2 = start_vec - perp * (shaft_w / 2)
-        neck = end_vec - direction * head_h
-        p3 = neck - perp * (shaft_w / 2);
-        p4 = neck + perp * (shaft_w / 2)
-        p5 = neck - perp * (head_w / 2);
-        p6 = neck + perp * (head_w / 2)
-        pygame.draw.polygon(surface, color, [p2, p3, p5, end_vec, p6, p4, p1])
-
-    def _draw_review_icons(self, game):
-        if game.review_mode and game.analysis_results:
-            idx = game.current_move_idx - 1
-            if 0 <= idx < len(game.analysis_results):
-                data = game.analysis_results[idx]
-                icon = self.review_icons.get(data.get("class"))
-                if icon:
-                    last_move = game.move_history_obj[idx]
-                    r, c = self._chess_sq_to_rowcol(last_move.to_square)
-                    x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
-                    self.screen.blit(icon, (x + game.square_size - 22, y + 2))
-
-    def _draw_dragged_piece(self, game):
-        r, c = game.dragging_piece
-        piece = game.board_visual.get_piece(r, c)
-        if piece:
-            mx, my = pygame.mouse.get_pos()
-            piece.draw(self.screen, mx - game.square_size // 2, my - game.square_size // 2)
-
-    def _draw_animated_piece(self, game):
-        piece = game.animation["piece"]
-        cx, cy = game.animation["current_pos"]
-        piece.draw(self.screen, cx, cy)
-
-    def _draw_eval_bar(self, game):
+    def _draw_eval_bar_enhanced(self, game):
+        # [FIXED] ถ้าไม่ได้เปิด Review ให้ซ่อนไปเลย
+        if not game.review_mode: return
         if game.eval_cp is None and game.eval_mate is None: return
 
-        bx, by = game.board_x - 30, game.board_y
-        bw, bh = 12, game.square_size * 8
+        bx, by = game.board_x - 35, game.board_y
+        bw, bh = 16, game.square_size * 8
 
-        pygame.draw.rect(self.screen, (50, 50, 50), (bx, by, bw, bh))
+        # [NEW] วาดกรอบสีฟ้า (Deep Sky Blue)
+        # วาดกรอบให้ใหญ่กว่าบาร์นิดนึง (padding 2px)
+        pygame.draw.rect(self.screen, (0, 191, 255), (bx - 2, by - 2, bw + 4, bh + 4), 2)
+
+        # พื้นหลังบาร์ (สีดำ)
+        pygame.draw.rect(self.screen, (40, 40, 40), (bx, by, bw, bh))
+
         score = game.eval_cp if game.eval_cp else 0
-        if game.eval_mate: score = 1000 if game.eval_mate > 0 else -1000
-        clamped = max(-500, min(500, score))
-        ratio = (clamped + 500) / 1000
+        if game.eval_mate: score = 2000 if game.eval_mate > 0 else -2000
+
+        vis_score = max(-400, min(400, score))
+        ratio = (vis_score + 400) / 800
         white_h = int(bh * ratio)
-        pygame.draw.rect(self.screen, (220, 220, 220), (bx, by + (bh - white_h), bw, white_h))
+
+        pygame.draw.rect(self.screen, (240, 240, 240), (bx, by + (bh - white_h), bw, white_h))
+        mid_y = by + bh // 2
+        pygame.draw.line(self.screen, (100, 100, 100), (bx, mid_y), (bx + bw, mid_y), 2)
+
+        score_text = ""
+        if game.eval_mate:
+            score_text = f"M{abs(game.eval_mate)}"
+        else:
+            score_text = f"{score / 100.0:+.1f}"
+
+        txt_surf = self.font_score.render(score_text, True, self.theme["text_main"])
+        txt_rect = txt_surf.get_rect(midtop=(bx + bw // 2, by + bh + 5))
+        self.screen.blit(txt_surf, txt_rect)
 
     def _draw_panel(self, game):
         theme = self.theme
@@ -250,6 +144,7 @@ class GameRenderer:
         tog_w, tog_h = 54, 28;
         tog_x = game.panel_x + game.panel_w - tog_w - 20
         game.ui_buttons["theme_toggle"] = self._draw_toggle(tog_x, y + 4, tog_w, tog_h, self.theme["name"] == "Dark")
+
         icon_size = 32;
         eng_x = tog_x - icon_size - 15
         eng_rect = pygame.Rect(eng_x, y + 2, icon_size, icon_size)
@@ -260,6 +155,7 @@ class GameRenderer:
         pygame.draw.rect(self.screen, ebg, eng_rect, border_radius=8)
         self._draw_icon_centered("robot", eng_rect.center, ecol)
         game.ui_buttons["engine_toggle"] = eng_rect
+
         rev_x = eng_x - icon_size - 10;
         rev_rect = pygame.Rect(rev_x, y + 2, icon_size, icon_size)
         rcol = (255, 255, 255) if game.review_mode else (
@@ -304,6 +200,13 @@ class GameRenderer:
             y += 60
         else:
             game.dropdown_data = None; y += 10
+
+        # [UPDATED] แสดง Best Move (ปรับสีให้ชัดขึ้น)
+        if game.review_mode and game.best_move_text:
+            # เลือกสี: ธีมสว่างใช้สีเข้ม, ธีมมืดใช้สีทอง
+            txt_col = (20, 20, 20) if self.theme["name"] == "Light" else (255, 215, 0)
+            bst_surf = self.font_ui_bold.render(f"Best: {game.best_move_text}", True, txt_col)
+            self.screen.blit(bst_surf, (x + 5, y - 25))
 
         st_col = theme["btn_idle"]
         if game.game_over:
@@ -409,6 +312,115 @@ class GameRenderer:
             pygame.draw.rect(self.screen, theme["scroll_thumb"], thumb, border_radius=4)
             game.ui_buttons["scrollbar_track"] = track
             game.ui_buttons["scrollbar_thumb"] = thumb
+
+    def _draw_fallen_king(self, game):
+        r, c = game.checked_king_pos
+        piece = game.board_visual.get_piece(r, c)
+        if piece and piece.image:
+            rotated_img = pygame.transform.rotate(piece.image, -90)
+            x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
+            rect = rotated_img.get_rect()
+            rect.center = (x + game.square_size // 2, y + game.square_size // 2)
+            self.screen.blit(rotated_img, rect)
+
+    def _draw_checkmate_badge(self, game):
+        r, c = game.checked_king_pos
+        x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
+        s = game.square_size
+        bx, by = x + s - 10, y + 10
+        pygame.draw.circle(self.screen, (0, 0, 0, 80), (bx + 2, by + 2), 16)
+        pygame.draw.circle(self.screen, self.theme["mate_badge"], (bx, by), 16)
+        pygame.draw.circle(self.screen, (255, 255, 255), (bx, by), 16, 2)
+        txt = self.font_mate.render("#", True, (255, 255, 255))
+        tr = txt.get_rect(center=(bx, by))
+        self.screen.blit(txt, tr)
+
+    def _draw_check_square(self, game):
+        r, c = game.checked_king_pos
+        x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
+        col = self.theme["mate_bg"] if game.board_logic.is_checkmate() else self.theme["check_bg"]
+        pygame.draw.rect(self.screen, col, (x, y, game.square_size, game.square_size))
+
+    def _draw_premove(self, game):
+        pass
+
+    def _draw_highlights_layer(self, game):
+        if game.selected_square:
+            s = game.square_size
+            overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+            for r, c in game.valid_moves:
+                x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
+                cx, cy = x + s // 2, y + s // 2
+                piece = game.board_visual.get_piece(r, c)
+                if piece:
+                    pygame.draw.circle(overlay, self.theme["capture_hint"], (cx, cy), s // 2 - 2, 6)
+                else:
+                    pygame.draw.circle(overlay, self.theme["move_hint"], (cx, cy), s // 6)
+            self.screen.blit(overlay, (0, 0))
+
+        overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+        for r, c in game.user_highlights:
+            x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
+            pygame.draw.rect(overlay, self.theme["highlight_green"], (x, y, game.square_size, game.square_size))
+
+        for start, end in game.user_arrows:
+            self._draw_arrow(overlay, game, start, end, self.theme["arrow_green"])
+
+        if game.right_click_start:
+            mx, my = pygame.mouse.get_pos()
+            if game.board_x <= mx < game.board_x + game.square_size * 8 and game.board_y <= my < game.board_y + game.square_size * 8:
+                curr = game.screen_to_board(mx, my)
+                if curr != game.right_click_start:
+                    self._draw_arrow(overlay, game, game.right_click_start, curr, self.theme["arrow_green"])
+        self.screen.blit(overlay, (0, 0))
+
+    def _draw_arrow(self, surface, game, start, end, color):
+        s = game.square_size
+        sx, sy = game.board_visual.to_screen(start[0], start[1], game.board_x, game.board_y, game.board_flipped)
+        ex, ey = game.board_visual.to_screen(end[0], end[1], game.board_x, game.board_y, game.board_flipped)
+        start_vec = pygame.Vector2(sx + s / 2, sy + s / 2)
+        end_vec = pygame.Vector2(ex + s / 2, ey + s / 2)
+        arrow = end_vec - start_vec
+        length = arrow.length()
+        if length < 1: return
+        shaft_w = s * 0.18;
+        head_w = s * 0.45;
+        head_h = s * 0.35
+        if length < s * 1.2: head_h, head_w = s * 0.3, s * 0.4
+        direction = arrow.normalize();
+        perp = pygame.Vector2(-direction.y, direction.x)
+        p1 = start_vec + perp * (shaft_w / 2);
+        p2 = start_vec - perp * (shaft_w / 2)
+        neck = end_vec - direction * head_h
+        p3 = neck - perp * (shaft_w / 2);
+        p4 = neck + perp * (shaft_w / 2)
+        p5 = neck - perp * (head_w / 2);
+        p6 = neck + perp * (head_w / 2)
+        pygame.draw.polygon(surface, color, [p2, p3, p5, end_vec, p6, p4, p1])
+
+    def _draw_review_icons(self, game):
+        if game.review_mode and game.analysis_results:
+            idx = game.current_move_idx - 1
+            if 0 <= idx < len(game.analysis_results):
+                data = game.analysis_results[idx]
+                icon = self.review_icons.get(data.get("class"))
+                if icon:
+                    last_move = game.move_history_obj[idx]
+                    r, c = self._chess_sq_to_rowcol(last_move.to_square)
+                    x, y = game.board_visual.to_screen(r, c, game.board_x, game.board_y, game.board_flipped)
+                    self.screen.blit(icon, (x + game.square_size - 22, y + 2))
+
+    def _draw_dragged_piece(self, game):
+        r, c = game.dragging_piece
+        piece = game.board_visual.get_piece(r, c)
+        if piece:
+            mx, my = pygame.mouse.get_pos()
+            piece.draw(self.screen, mx - game.square_size // 2, my - game.square_size // 2)
+
+    def _draw_animated_piece(self, game):
+        piece = game.animation["piece"]
+        cx, cy = game.animation["current_pos"]
+        piece.draw(self.screen, cx, cy)
 
     def _draw_promotion_popup(self, game):
         sw, sh = game.window_width, game.window_height

@@ -21,6 +21,8 @@ except ImportError:
     class EngineClient:
         def __init__(self, **k): pass
 
+        def close(self): pass
+
 
     class GameReviewer:
         def __init__(self, e): pass
@@ -30,7 +32,7 @@ class Game:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
-        pygame.display.set_caption("Chess Trainer - Eval Bar & Best Move")
+        pygame.display.set_caption("Chess Trainer - Eval Fixed")
 
         # View
         self.renderer = GameRenderer(self.screen)
@@ -67,7 +69,9 @@ class Game:
         self.checked_king_pos = None
 
         # Analysis Data
-        self.best_move_text = ""  # <--- เพิ่มตัวแปรเก็บข้อความ Best Move
+        self.best_move_text = ""
+        self.eval_cp = None
+        self.eval_mate = None
 
         # Special Actions
         self.is_promoting = False
@@ -107,28 +111,25 @@ class Game:
         self.elo_dropdown_open = False
         self.elo_options = [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000]
 
+        # Dual Engine Setup
         self.engine = EngineClient(elo=self.engine_elo, think_time=0.5)
+        self.analysis_engine = EngineClient(elo=3000, think_time=0.1)
+
         self.reviewer = GameReviewer(self.engine)
         self.review_mode = False
         self.analysis_results = []
         self.is_analyzing = False
-        self.eval_cp = None
-        self.eval_mate = None
 
     def recalculate_layout(self):
         self.window_width, self.window_height = self.screen.get_size()
         w, h = self.window_width, self.window_height
-
-        margin = 45  # Margin 45 เพื่อให้มีที่วาง Eval Bar
+        margin = 45
         self.panel_w = 360
-
         avail_w = w - (margin * 2) - self.panel_w - 25
         avail_h = h - (margin * 2)
         sq_size = max(32, min(avail_w // 8, avail_h // 8))
-
         self.square_size = sq_size
         self.board_visual.set_square_size(sq_size)
-
         bsize = sq_size * 8
         self.board_x = max(margin, (w - bsize - self.panel_w - 25) // 2)
         self.board_y = margin
@@ -137,12 +138,10 @@ class Game:
     def reset_game(self):
         self.board_logic.reset()
         self.board_visual.load_from_fen(self.board_logic.board_fen())
-
         self.turn_color = "white"
         self.board_flipped = False
         if self.engine_enabled and self.engine_color == chess.WHITE:
             self.board_flipped = True
-
         self.move_history_san = []
         self.move_history_obj = []
         self.current_move_idx = 0
@@ -154,13 +153,13 @@ class Game:
         self.checked_king_pos = None
         self.is_promoting = False
         self.engine_locked = False
-
         self.user_arrows = []
         self.user_highlights = []
         self.premove = None
         self.premove_squares = []
+
         self.analysis_results = []
-        self.review_mode = False
+        self.review_mode = False  # Reset review mode
         self.best_move_text = ""
         self.eval_cp = None
         self.eval_mate = None
@@ -181,13 +180,12 @@ class Game:
                         self.process_move(event.engine_move, animate=True)
                 else:
                     self.handle_event(event)
-
             self.update_shake()
             self.update_animation()
             self.renderer.draw_game(self)
             self.clock.tick(60)
-
         self.engine.close()
+        self.analysis_engine.close()
         pygame.quit()
 
     def handle_event(self, event):
@@ -204,16 +202,13 @@ class Game:
             elif event.button in (4, 5):
                 d = 1 if event.button == 4 else -1
                 self.pgn_scroll_y = max(0, min(self.max_scroll_y, self.pgn_scroll_y - d * 20))
-
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 self._handle_release(event.pos)
             elif event.button == 3:
                 self._handle_rclick_up(event.pos)
-
         elif event.type == pygame.MOUSEWHEEL:
             self.pgn_scroll_y = max(0, min(self.max_scroll_y, self.pgn_scroll_y - event.y * 20))
-
         elif event.type == pygame.MOUSEMOTION:
             if self.is_dragging_scrollbar:
                 new_y = event.pos[1] - self.drag_offset_y
@@ -222,7 +217,6 @@ class Game:
                 if track and thumb:
                     ratio = (new_y - track.top) / (track.height - thumb.height)
                     self.pgn_scroll_y = max(0, min(self.max_scroll_y, int(ratio * self.max_scroll_y)))
-
         elif event.type == pygame.KEYDOWN:
             if not self.is_promoting:
                 if event.key == pygame.K_LEFT:
@@ -231,95 +225,76 @@ class Game:
                     self.jump_to_move(self.current_move_idx + 1)
 
     def _handle_click(self, pos):
-        if self.user_arrows or self.user_highlights:
-            self.user_arrows = []
-            self.user_highlights = []
-
+        if self.user_arrows or self.user_highlights: self.user_arrows = []; self.user_highlights = []
         x, y = pos
-        if x >= self.panel_x:
-            self._handle_panel_click(pos)
-            return
-
+        if x >= self.panel_x: self._handle_panel_click(pos); return
         if self.game_over: return
-
-        if self.current_move_idx != len(self.move_history_obj):
-            return
+        if self.current_move_idx != len(self.move_history_obj): return
 
         is_my_turn = not (self.engine_enabled and self.board_logic.turn == self.engine_color)
+        if not is_my_turn: return
 
         if not (
                 self.board_x <= x < self.board_x + self.square_size * 8 and self.board_y <= y < self.board_y + self.square_size * 8):
             self.selected_square = None;
-            self.valid_moves = []
+            self.valid_moves = [];
             return
 
         r, c = self.screen_to_board(x, y)
         piece = self.board_visual.get_piece(r, c)
+        if self.animation: return
 
-        if is_my_turn:
-            self.premove = None;
-            self.premove_squares = []
-            if self.animation: return
-
-            if piece and piece.color == self.turn_color:
-                self.is_dragging = True
-                self.dragging_piece = (r, c)
-                self.selected_square = (r, c)
-                self.valid_moves = []
-                src = chess.square(c, 7 - r)
-                for m in self.board_logic.legal_moves:
-                    if m.from_square == src:
-                        self.valid_moves.append(self._chess_sq_to_rowcol(m.to_square))
-            elif (r, c) in self.valid_moves:
-                self._execute_move(r, c)
-            else:
-                self.selected_square = None;
-                self.valid_moves = []
+        if piece and piece.color == self.turn_color:
+            self.is_dragging = True;
+            self.dragging_piece = (r, c);
+            self.selected_square = (r, c)
+            self.valid_moves = []
+            src = chess.square(c, 7 - r)
+            for m in self.board_logic.legal_moves:
+                if m.from_square == src: self.valid_moves.append(self._chess_sq_to_rowcol(m.to_square))
+        elif (r, c) in self.valid_moves:
+            self._execute_move(r, c)
         else:
-            if piece and piece.color != self.engine_color:
-                self.is_dragging = True;
-                self.dragging_piece = (r, c);
-                self.selected_square = (r, c)
-            elif self.selected_square:
-                self._set_premove(self.selected_square, (r, c))
-                self.selected_square = None
+            self.selected_square = None; self.valid_moves = []
 
     def _handle_release(self, pos):
         self.is_dragging_scrollbar = False
         is_my_turn = not (self.engine_enabled and self.board_logic.turn == self.engine_color)
+        if not is_my_turn: self.is_dragging = False; self.dragging_piece = None; return
 
         if self.is_dragging and self.dragging_piece:
             x, y = pos
             if self.board_x <= x < self.board_x + self.square_size * 8 and self.board_y <= y < self.board_y + self.square_size * 8:
                 dr, dc = self.screen_to_board(x, y)
                 if (dr, dc) != self.dragging_piece:
-                    if is_my_turn:
-                        if (dr, dc) in self.valid_moves:
-                            self._execute_move(dr, dc)
-                    else:
-                        self._set_premove(self.dragging_piece, (dr, dc))
+                    if (dr, dc) in self.valid_moves: self._execute_move(dr, dc)
             self.is_dragging = False;
             self.dragging_piece = None
 
     def _execute_move(self, r, c):
         start = self.selected_square
+        if start is None: return
         p = self.board_visual.get_piece(*start)
         if p and p.kind == "pawn" and ((p.color == "white" and r == 0) or (p.color == "black" and r == 7)):
-            self.is_promoting = True
+            self.is_promoting = True;
             self.promotion_data = {"from": start, "to": (r, c), "color": p.color}
             self.selected_square = None;
-            self.valid_moves = []
+            self.valid_moves = [];
             return
-
-        src = self.rowcol_to_uci(*start)
+        src = self.rowcol_to_uci(*start);
         dst = self.rowcol_to_uci(r, c)
         move = chess.Move.from_uci(src + dst)
-        if move in self.board_logic.legal_moves:
-            self.process_move(move, animate=True)
+        if move in self.board_logic.legal_moves: self.process_move(move, animate=True)
         self.selected_square = None;
         self.valid_moves = []
 
     def process_move(self, move, animate=True, is_replay=False):
+        is_ep = False
+        try:
+            if self.board_logic.is_en_passant(move): is_ep = True
+        except:
+            pass
+
         if not is_replay:
             self.user_arrows = [];
             self.user_highlights = []
@@ -339,23 +314,23 @@ class Game:
         if animate and piece:
             sx, sy = self.board_visual.to_screen(src_r, src_c, self.board_x, self.board_y, self.board_flipped)
             ex, ey = self.board_visual.to_screen(dst_r, dst_c, self.board_x, self.board_y, self.board_flipped)
-            self._visual_move(piece, src_r, src_c, dst_r, dst_c, move)
+            self._visual_move(piece, src_r, src_c, dst_r, dst_c, move, is_ep)
             self.animation = {
                 "piece": piece, "start_pos": (sx, sy), "end_pos": (ex, ey),
                 "current_pos": (sx, sy), "t": 0.0, "speed": 0.12, "hide_square": (dst_r, dst_c)
             }
         else:
-            if piece: self._visual_move(piece, src_r, src_c, dst_r, dst_c, move)
+            if piece: self._visual_move(piece, src_r, src_c, dst_r, dst_c, move, is_ep)
             self._on_move_complete()
 
-    def _visual_move(self, piece, sr, sc, dr, dc, move):
+    def _visual_move(self, piece, sr, sc, dr, dc, move, is_ep=False):
         if piece.kind == "king" and abs(sc - dc) == 2:
             is_kingside = (dc == 6)
             rk_src = 7 if is_kingside else 0
             rk_dst = 5 if is_kingside else 3
             self.board_visual.move_piece(sr, sc, dr, dc)
             self.board_visual.move_piece(sr, rk_src, sr, rk_dst)
-        elif self.board_logic.is_en_passant(move):
+        elif is_ep:
             self.board_visual.move_piece(sr, sc, dr, dc)
             self.board_visual.remove_piece(sr, dc)
         elif move.promotion:
@@ -367,14 +342,11 @@ class Game:
     def undo_move(self):
         if self.current_move_idx <= 0: return
         self.animation = None
-
         steps = 2 if self.engine_enabled and len(self.move_history_obj) >= 2 else 1
         target_idx = max(0, self.current_move_idx - steps)
-
         self.move_history_obj = self.move_history_obj[:target_idx]
         self.move_history_san = self.move_history_san[:target_idx]
         self.current_move_idx = target_idx
-
         self._hard_reset_board()
 
     def jump_to_move(self, target_idx):
@@ -387,9 +359,7 @@ class Game:
         self.board_logic.reset()
         for i in range(self.current_move_idx):
             self.board_logic.push(self.move_history_obj[i])
-
         self.board_visual.load_from_fen(self.board_logic.board_fen())
-
         self.turn_color = "white" if self.board_logic.turn == chess.WHITE else "black"
         self.game_over = False
         self.game_result_msg = ""
@@ -400,9 +370,7 @@ class Game:
         self.user_arrows = []
         self.in_check = False
         self.checked_king_pos = None
-
         if self.current_move_idx == 0: self.engine_locked = False
-
         self.check_game_status()
         self.analyze_board()
 
@@ -432,15 +400,10 @@ class Game:
         self.turn_color = "white" if self.board_logic.turn == chess.WHITE else "black"
         self.check_game_status()
         self.analyze_board()
-        is_my_turn = not (self.engine_enabled and self.board_logic.turn == self.engine_color)
-        if is_my_turn and self.premove:
-            self._check_and_execute_premove()
-        else:
-            self.trigger_engine_move()
+        self.trigger_engine_move()
 
     def check_game_status(self):
         self.in_check = self.board_logic.is_check()
-
         if self.board_logic.is_checkmate():
             self.game_over = True
             w = "Black" if self.board_logic.turn == chess.WHITE else "White"
@@ -451,37 +414,28 @@ class Game:
             self.game_over = True; self.game_result_msg = "Draw (Material)"
         elif self.board_logic.can_claim_threefold_repetition():
             self.game_over = True; self.game_result_msg = "Draw (Repetition)"
-
         self.checked_king_pos = self.get_king_pos() if self.in_check else None
+        if self.in_check: self.shake_pos = self.checked_king_pos; self.shake_timer = 25
 
-        if self.in_check:
-            self.shake_pos = self.checked_king_pos
-            self.shake_timer = 25
-
-    # [UPDATED] วิเคราะห์กระดานใน Thread เพื่อไม่ให้ UI ค้าง
     def analyze_board(self):
-        # สร้าง Thread เพื่อรันการวิเคราะห์
+        # [FIXED] ถ้าไม่เปิดโหมด Review ไม่ต้องวิเคราะห์
+        if not self.review_mode: return
+
         def task():
             try:
-                # ใช้ FEN เพื่อความปลอดภัยของ Thread (สร้างกระดานจำลอง)
                 current_fen = self.board_logic.fen()
                 temp_board = chess.Board(current_fen)
-
-                info = self.engine.analyse_position(temp_board)
-
+                info = self.analysis_engine.analyse_position(temp_board)
                 if info:
                     self.eval_cp = info.get("cp")
                     self.eval_mate = info.get("mate")
-
-                    # หา Best Move จาก PV (Principal Variation)
                     if "pv" in info and len(info["pv"]) > 0:
                         best_move = info["pv"][0]
-                        # แปลงเป็น SAN เพื่อให้อ่านง่าย
                         self.best_move_text = temp_board.san(best_move)
                     else:
                         self.best_move_text = ""
             except Exception as e:
-                print(f"Analysis error: {e}")
+                pass
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -524,11 +478,9 @@ class Game:
         k = self.board_logic.king(self.board_logic.turn)
         return self._chess_sq_to_rowcol(k) if k is not None else None
 
-    # --- UI Events Handlers ---
     def _handle_panel_click(self, pos):
         x, y = pos
         b = self.ui_buttons
-
         if b.get("theme_toggle") and b["theme_toggle"].collidepoint(x, y): self.toggle_theme()
         if b.get("engine_toggle") and b["engine_toggle"].collidepoint(x, y):
             self.engine_enabled = not self.engine_enabled
@@ -538,6 +490,8 @@ class Game:
             if self.review_mode and not self.analysis_results and not self.is_analyzing and len(
                     self.move_history_obj) > 0:
                 threading.Thread(target=self._run_review, daemon=True).start()
+
+            # [FIXED] สั่งวิเคราะห์ทันทีที่เปิดโหมด Review
             self.analyze_board()
 
         if self.engine_enabled:
@@ -545,28 +499,23 @@ class Game:
             if b.get("side_black") and b["side_black"].collidepoint(x, y): self.engine_color = chess.WHITE
             if b.get("elo_head") and b["elo_head"].collidepoint(x,
                                                                 y): self.elo_dropdown_open = not self.elo_dropdown_open
-
         if b.get("new") and b["new"].collidepoint(x, y): self.reset_game()
         if b.get("flip") and b["flip"].collidepoint(x, y): self.board_flipped = not self.board_flipped
         if b.get("pgn") and b["pgn"].collidepoint(x, y): self.copy_pgn()
         if b.get("undo") and b["undo"].collidepoint(x, y): self.undo_move()
         if b.get("resign") and b["resign"].collidepoint(x, y):
             if not self.game_over: self.game_over = True; self.game_result_msg = "Resigned."
-
         if b.get("prev") and b["prev"].collidepoint(x, y): self.jump_to_move(self.current_move_idx - 1)
         if b.get("next") and b["next"].collidepoint(x, y): self.jump_to_move(self.current_move_idx + 1)
-
         if b.get("scrollbar_track") and b["scrollbar_track"].collidepoint(x, y):
             if b["scrollbar_thumb"].collidepoint(x, y):
-                self.is_dragging_scrollbar = True;
-                self.drag_offset_y = y - b["scrollbar_thumb"].top
+                self.is_dragging_scrollbar = True; self.drag_offset_y = y - b["scrollbar_thumb"].top
             else:
                 if y < b["scrollbar_thumb"].top:
                     self.pgn_scroll_y -= 100
                 else:
                     self.pgn_scroll_y += 100
                 self.pgn_scroll_y = max(0, min(self.max_scroll_y, self.pgn_scroll_y))
-
         for idx, rect in self.pgn_click_zones:
             if rect.collidepoint(x, y): self.jump_to_move(idx + 1); break
 
@@ -595,11 +544,9 @@ class Game:
                     break
 
     def _handle_rclick(self, pos):
-        if self.selected_square or self.is_dragging or self.premove:
+        if self.selected_square or self.is_dragging:
             self.selected_square = None;
             self.is_dragging = False;
-            self.premove = None;
-            self.premove_squares = []
             return
         x, y = pos
         if self.board_x <= x < self.board_x + self.square_size * 8 and self.board_y <= y < self.board_y + self.square_size * 8:
@@ -625,15 +572,7 @@ class Game:
         self.right_click_start = None
 
     def _set_premove(self, start, end):
-        src = self.rowcol_to_uci(*start)
-        dst = self.rowcol_to_uci(*end)
-        move = chess.Move.from_uci(f"{src}{dst}")
-        p = self.board_visual.get_piece(*start)
-        if p and p.kind == "pawn":
-            if (p.color == "white" and end[0] == 0) or (p.color == "black" and end[0] == 7): move = chess.Move.from_uci(
-                f"{src}{dst}q")
-        self.premove = move;
-        self.premove_squares = [start, end]
+        pass
 
     def toggle_theme(self):
         self.is_dark_mode = not self.is_dark_mode
