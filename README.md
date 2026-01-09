@@ -35,7 +35,7 @@
 1. Clone Repository
    ดึงซอร์สโค้ดลงมาที่เครื่องของคุณ:
    ```bash
-   git clone [https://github.com/WitsanuTun/CHESS-OOP-68.git](https://github.com/WitsanuTun/CHESS-OOP-68.git)
+   git clone https://github.com/WitsanuTun/CHESS-OOP-68.git
    cd CHESS-OOP-68
 2. Install Dependencies ติดตั้ง Library ที่จำเป็น (pygame, python-chess, etc.):
    ```bash
