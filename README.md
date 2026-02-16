@@ -4,10 +4,10 @@
 
 **โปรแกรมฝึกฝนและจำลองการเล่นหมากรุกสากลอัจฉริยะ** *(Powered by Python, Pygame & Stockfish Engine)*
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg?logo=python&logoColor=white)
-![Pygame](https://img.shields.io/badge/Pygame-2.6+-green.svg?logo=python&logoColor=white)
-![Stockfish](https://img.shields.io/badge/Engine-Stockfish-orange.svg)
-![License](https://img.shields.io/badge/License-Education-lightgrey.svg)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Pygame](https://img.shields.io/badge/Pygame-2.6+-green.svg?logo=python&logoColor=white)](https://www.pygame.org/)
+[![Stockfish](https://img.shields.io/badge/Engine-Stockfish-orange.svg)](https://stockfishchess.org/)
+[![License](https://img.shields.io/badge/License-Education-lightgrey.svg)](https://en.wikipedia.org/wiki/Educational_software)
 
 </div>
 
