@@ -15,7 +15,7 @@ class Game:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
-        pygame.display.set_caption("Chess Trainer - Fantasy Editor")
+        pygame.display.set_caption("UBU Chess Trainer")
 
         self.renderer = GameRenderer(self.screen)
         self.board_visual = Board(DEFAULT_SQUARE_SIZE)
@@ -246,7 +246,8 @@ class Game:
         elif (r, c) in self.valid_moves:
             self._execute_move(r, c)
         else:
-            self.selected_square = None; self.valid_moves = []
+            self.selected_square = None;
+            self.valid_moves = []
 
     def _handle_release(self, pos):
         self.is_dragging_scrollbar = False
@@ -407,11 +408,16 @@ class Game:
                 w = "Black" if self.board_logic.turn == chess.WHITE else "White"
                 self.game_result_msg = f"Checkmate! {w} wins."
             elif self.board_logic.is_stalemate():
-                self.game_over = True; self.game_result_msg = "Draw (Stalemate)"
-            elif self.board_logic.is_insufficient_material():
-                self.game_over = True; self.game_result_msg = "Draw (Material)"
+                self.game_over = True;
+                self.game_result_msg = "Draw (Stalemate)"
+
+            # --- [FIXED] ตัดบรรทัดนี้ออก เพื่อให้เล่นโหมด Fantasy ได้สุดทางโดยไม่โดนบังคับเสมอ ---
+            # elif self.board_logic.is_insufficient_material():
+            #     self.game_over = True; self.game_result_msg = "Draw (Material)"
+
             elif self.board_logic.can_claim_threefold_repetition():
-                self.game_over = True; self.game_result_msg = "Draw (Repetition)"
+                self.game_over = True;
+                self.game_result_msg = "Draw (Repetition)"
         except Exception:
             pass
 
@@ -571,10 +577,11 @@ class Game:
         if b.get("next") and b["next"].collidepoint(x, y): self.jump_to_move(self.current_move_idx + 1)
 
         if b.get("scrollbar_track") and b["scrollbar_track"].collidepoint(x, y):
-            if b["scrollbar_thumb"].collidepoint(x, y):
-                self.is_dragging_scrollbar = True; self.drag_offset_y = y - b["scrollbar_thumb"].top
+            if b.get("scrollbar_thumb") and b["scrollbar_thumb"].collidepoint(x, y):
+                self.is_dragging_scrollbar = True;
+                self.drag_offset_y = y - b["scrollbar_thumb"].top
             else:
-                if y < b["scrollbar_thumb"].top:
+                if b.get("scrollbar_thumb") and y < b["scrollbar_thumb"].top:
                     self.pgn_scroll_y -= 100
                 else:
                     self.pgn_scroll_y += 100
@@ -582,7 +589,6 @@ class Game:
         for idx, rect in self.pgn_click_zones:
             if rect.collidepoint(x, y): self.jump_to_move(idx + 1); break
 
-    # [NEW] เพิ่มฟังก์ชันสำหรับ Dropdown กลับมาแล้วครับ
     def _handle_dropdown(self, pos):
         if getattr(self, 'dropdown_data', None):
             for val, rect in self.dropdown_data["items"]:
@@ -593,7 +599,6 @@ class Game:
                     return
         self.elo_dropdown_open = False
 
-    # [NEW] เพิ่มฟังก์ชันสำหรับ Promotion กลับมาแล้วครับ
     def _handle_promotion_sel(self, pos):
         if "rects" in getattr(self, 'promotion_data', {}):
             for name, rect in self.promotion_data["rects"].items():
