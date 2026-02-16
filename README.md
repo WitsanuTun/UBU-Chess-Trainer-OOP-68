@@ -15,7 +15,7 @@
 
 <div align="center">
   <br>
-  <img src="[https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3V4b2F5eXF6Z2t5a3g4Z2t5a3g4Z2t5a3g4Z2t5a3g4Z2t5YSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l3vR16pONsV8cKkWk/giphy.gif" width="400" alt="Funny Chess](https://media.tenor.com/4TcoAC_uquwAAAAM/magnus-carlsen-magnus.gif)">
+  <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3V4b2F5eXF6Z2t5a3g4Z2t5a3g4Z2t5a3g4Z2t5a3g4Z2t5YSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l3vR16pONsV8cKkWk/giphy.gif" width="400" alt="Funny Chess](https://media.tenor.com/4TcoAC_uquwAAAAM/magnus-carlsen-magnus.gif)">
   <p><i>เมื่อคุณพยายามคำนวณหมาก 20 ตาเดินล่วงหน้าในหัว... 🤯</i></p>
   <br>
 </div>
