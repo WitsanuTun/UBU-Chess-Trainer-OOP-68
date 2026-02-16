@@ -15,7 +15,7 @@ class Game:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
-        pygame.display.set_caption("UBU Chess Trainer")
+        pygame.display.set_caption("Chess Trainer - Fantasy Editor")
 
         self.renderer = GameRenderer(self.screen)
         self.board_visual = Board(DEFAULT_SQUARE_SIZE)
@@ -33,6 +33,9 @@ class Game:
     def _init_game_state(self):
         self.is_dark_mode = True
         self.board_flipped = False
+
+        # [NEW] ตัวแปรจำภาพกระดานเริ่มต้น (เพื่อแก้บั๊ก Undo ในกระดาน Custom)
+        self.start_fen = chess.STARTING_FEN
 
         self.selected_square = None
         self.valid_moves = []
@@ -116,6 +119,9 @@ class Game:
             self.board_logic = chess.Board(fen)
         else:
             self.board_logic.reset()
+
+        # [NEW] อัปเดตภาพจำเริ่มต้นทุกครั้งที่กดเริ่มเกมใหม่
+        self.start_fen = self.board_logic.fen()
 
         self.board_visual.load_from_fen(self.board_logic.board_fen())
         self.turn_color = "white" if self.board_logic.turn == chess.WHITE else "black"
@@ -349,7 +355,8 @@ class Game:
         self._hard_reset_board()
 
     def _hard_reset_board(self):
-        self.board_logic.reset()
+        # [FIXED] โหลดกระดานจากภาพจำเริ่มต้น ไม่ใช่ล้างกระดานทิ้งทั้งหมด
+        self.board_logic = chess.Board(self.start_fen)
         for i in range(self.current_move_idx):
             self.board_logic.push(self.move_history_obj[i])
         self.board_visual.load_from_fen(self.board_logic.board_fen())
@@ -410,11 +417,6 @@ class Game:
             elif self.board_logic.is_stalemate():
                 self.game_over = True;
                 self.game_result_msg = "Draw (Stalemate)"
-
-            # --- [FIXED] ตัดบรรทัดนี้ออก เพื่อให้เล่นโหมด Fantasy ได้สุดทางโดยไม่โดนบังคับเสมอ ---
-            # elif self.board_logic.is_insufficient_material():
-            #     self.game_over = True; self.game_result_msg = "Draw (Material)"
-
             elif self.board_logic.can_claim_threefold_repetition():
                 self.game_over = True;
                 self.game_result_msg = "Draw (Repetition)"
@@ -467,9 +469,16 @@ class Game:
 
         threading.Thread(target=task, daemon=True).start()
 
+    # [FIXED] ให้ Copy PGN แล้วติดโครงสร้างกระดาน Custom ไปด้วย
     def copy_pgn(self):
         try:
-            pyperclip.copy(str(chess.pgn.Game.from_board(self.board_logic)))
+            game_pgn = chess.pgn.Game()
+            if self.start_fen != chess.STARTING_FEN:
+                game_pgn.setup(chess.Board(self.start_fen))
+            node = game_pgn
+            for move in self.move_history_obj:
+                node = node.add_variation(move)
+            pyperclip.copy(str(game_pgn))
         except:
             pass
 
@@ -543,9 +552,11 @@ class Game:
                 self.board_logic.turn = chess.BLACK
                 self.turn_color = "black"
 
+            # [NEW] เมื่อกด Done Editing ให้จำภาพกระดานล่าสุดเป็นจุดเริ่มต้น
             if b.get("edit_toggle_done") and b["edit_toggle_done"].collidepoint(x, y):
                 self._update_castling_rights()
                 self.edit_mode = False
+                self.start_fen = self.board_logic.fen()  # บันทึก Snapshot!
                 self.check_game_status()
                 self.analyze_board()
             return
@@ -599,7 +610,9 @@ class Game:
                     return
         self.elo_dropdown_open = False
 
+    # [FIXED] ฟังก์ชันกดโปรโมท (ป้องกันบั๊กกดยกเลิกไม่ได้)
     def _handle_promotion_sel(self, pos):
+        clicked_on_piece = False
         if "rects" in getattr(self, 'promotion_data', {}):
             for name, rect in self.promotion_data["rects"].items():
                 if rect.collidepoint(pos):
@@ -611,7 +624,15 @@ class Game:
                     if move in self.board_logic.legal_moves: self.process_move(move, animate=True)
                     self.is_promoting = False
                     self.promotion_data = {}
+                    clicked_on_piece = True
                     break
+
+        # ถ้าคลิกที่ว่างๆ (ยกเลิกโปรโมท)
+        if not clicked_on_piece:
+            self.is_promoting = False
+            self.promotion_data = {}
+            self.selected_square = None
+            self.valid_moves = []
 
     def _handle_rclick(self, pos):
         if getattr(self, 'selected_square', None) or getattr(self, 'is_dragging', False):
