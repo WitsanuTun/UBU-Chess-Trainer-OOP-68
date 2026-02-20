@@ -48,8 +48,8 @@
 
 **1. ดึงซอร์สโค้ดลงมาที่เครื่องของคุณ (Clone Repository):**
 ```bash
-git clone [https://github.com/WitsanuTun/CHESS-OOP-68.git](https://github.com/WitsanuTun/CHESS-OOP-68.git)
-cd CHESS-OOP-68
+git clone https://github.com/WitsanuTun/UBU-Chess-Trainer-OOP-68-.git
+cd UBU-Chess-Trainer-OOP-68
 ```
 
 **2. ติดตั้ง Library ที่จำเป็น:**
