@@ -4,7 +4,10 @@ import os
 DEFAULT_SQUARE_SIZE = 80
 ASSET_DIR = "assets/pieces"
 
-
+# ==========================================
+# Superclass (คลาสแม่) - Inheritance
+# ==========================================
+# ChessPiece เป็นคลาสแม่ที่เก็บคุณสมบัติร่วมของหมากทุกตัว (color, kind, โหลดรูป, ขนาด)
 class ChessPiece:
     def __init__(self, color: str, kind: str, square_size: int):
         self.color = color  # "white" or "black"
@@ -21,6 +24,7 @@ class ChessPiece:
             self.base_image = pygame.Surface((square_size, square_size))
             self.base_image.fill((255, 0, 0))
 
+        # Encapsulation: เก็บ state ภายใน (image, size) ไม่ให้ภายนอกแก้โดยตรง ใช้ set_size() แทน
         self.image = None
         self.size = None
         self.set_size(square_size)
@@ -34,36 +38,36 @@ class ChessPiece:
             (square_size, square_size)
         )
 
+    # Polymorphism: เมธอด draw() ใช้ได้กับทุก subclass (Pawn, Rook, ...) โดยไม่ต้องรู้ชนิดหมาก
     def draw(self, screen, x, y):
         if self.image:
             screen.blit(self.image, (x, y))
 
-# --- Subclasses (Inheritance Implementation) ---
+# ==========================================
+# Subclasses (คลาสลูก) - Inheritance จาก ChessPiece
+# ==========================================
+# แต่ละคลาสสืบทอดจาก ChessPiece และเรียก super().__init__() พร้อมส่ง kind ที่ต่างกัน
 
 class Pawn(ChessPiece):
     def __init__(self, color, square_size):
-        super().__init__(color, "pawn", square_size)
+        super().__init__(color, "pawn", square_size)  # Inheritance: เรียก constructor ของ Superclass
 
 
 class Rook(ChessPiece):
     def __init__(self, color, square_size):
         super().__init__(color, "rook", square_size)
 
-
 class Knight(ChessPiece):
     def __init__(self, color, square_size):
         super().__init__(color, "knight", square_size)
-
 
 class Bishop(ChessPiece):
     def __init__(self, color, square_size):
         super().__init__(color, "bishop", square_size)
 
-
 class Queen(ChessPiece):
     def __init__(self, color, square_size):
         super().__init__(color, "queen", square_size)
-
 
 class King(ChessPiece):
     def __init__(self, color, square_size):

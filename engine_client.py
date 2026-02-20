@@ -136,23 +136,25 @@ import random
 from pathlib import Path
 
 # ==========================================
-# 1. Superclass (คลาสแม่) - แสดงเรื่อง Inheritance
+# OOP ในโมดูลนี้: Superclass, Subclass, Inheritance, Polymorphism, Encapsulation
 # ==========================================
+
+# ---------- 1. Superclass (คลาสแม่) ----------
+# BasePlayer เป็นคลาสแม่ กำหนด interface ร่วม: ทุก Player ต้องมี choose_move(board)
 class BasePlayer:
     def __init__(self, name):
         self.name = name
 
-    # Polymorphism: ฟังก์ชันเปล่าที่รอให้คลาสลูกนำไปเขียนทับ (Override)
+    # Polymorphism (ตัวแม่): ฟังก์ชันเปล่า รอให้ Subclass นำไป Override
     def choose_move(self, board):
         """คลาสลูกต้องนำฟังก์ชันนี้ไปเขียนตรรกะการเดินหมากของตัวเอง"""
         pass
 
-# ==========================================
-# 2. Subclass (คลาสลูก) - สืบทอดคุณสมบัติจาก BasePlayer
-# ==========================================
+# ---------- 2. Subclass + Inheritance (คลาสลูก + การสืบทอด) ----------
+# EngineClient สืบทอดจาก BasePlayer ได้ name และ choose_move(); แล้ว Override choose_move()
 class EngineClient(BasePlayer):
     def __init__(self, engine_path=None, elo=1200, think_time=0.2):
-        # Inheritance: เรียกใช้ Constructor ของคลาสแม่
+        # Inheritance: เรียก Constructor ของ Superclass ก่อน
         super().__init__("Stockfish Engine AI")
 
         if engine_path is None:
@@ -163,6 +165,7 @@ class EngineClient(BasePlayer):
         self.think_time = float(think_time)
         self.elo = elo
 
+        # Encapsulation: _engine, _opened เป็น state ภายใน (โดย convention ขึ้นต้น _ = private)
         self._engine = None
         self._opened = False
 

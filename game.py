@@ -10,7 +10,9 @@ from board import Board
 from renderer import GameRenderer
 from engine_client import EngineClient
 
-
+# ==========================================
+# Encapsulation (การห่อหุ้มข้อมูล)
+# ==========================================
 class Game:
     def __init__(self):
         pygame.init()
@@ -30,6 +32,7 @@ class Game:
         self.running = True
         self.clock = pygame.time.Clock()
 
+    # Encapsulation: เมธอดภายใน (private) จัดการ state เริ่มต้นของเกม
     def _init_game_state(self):
         self.is_dark_mode = True
         self.board_flipped = False
@@ -84,6 +87,7 @@ class Game:
         self.elo_dropdown_open = False
         self.elo_options = [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000]
 
+        # Polymorphism: EngineClient เป็น BasePlayer ใช้ choose_move(board) ได้เหมือนกัน ไม่ต้องรู้ว่าเป็น AI
         self.engine = EngineClient(elo=self.engine_elo, think_time=0.5)
         self.analysis_engine = EngineClient(elo=3000, think_time=0.1)
         self.show_eval = False
@@ -464,6 +468,7 @@ class Game:
 
     def make_engine_move(self):
         def task():
+            # Polymorphism: เรียก choose_move() โดยไม่สนว่า engine เป็น EngineClient หรือ BasePlayer อื่น
             m = self.engine.choose_move(self.board_logic)
             if m: pygame.event.post(pygame.event.Event(pygame.USEREVENT, {'engine_move': m}))
 
