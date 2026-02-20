@@ -46,7 +46,7 @@ class ChessPiece:
 # ==========================================
 # Subclasses (คลาสลูก) - Inheritance จาก ChessPiece
 # ==========================================
-# แต่ละคลาสสืบทอดจาก ChessPiece และเรียก super().__init__() พร้อมส่ง kind ที่ต่างกัน
+
 
 class Pawn(ChessPiece):
     def __init__(self, color, square_size):
